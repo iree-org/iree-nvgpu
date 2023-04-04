@@ -1,11 +1,12 @@
-# Copyright 2023 The IREE Authors
+# Copyright 2023 The OpenXLA Authors
 #
 # Licensed under the Apache License v2.0 with LLVM Exceptions.
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-import bazel_to_cmake_targets
 import re
+
+import bazel_to_cmake_targets
 
 DEFAULT_ROOT_DIRS = ["compiler"]
 

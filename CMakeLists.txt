@@ -12,7 +12,7 @@ project(OPENXLA_NVGPU)
 
 # TODO: Fix this once the project is slotted into place.
 if(NOT IREE_ROOT_DIR)
-  set(IREE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../iree")
+  set(IREE_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../iree")
 endif()
 
 # Customize defaults.

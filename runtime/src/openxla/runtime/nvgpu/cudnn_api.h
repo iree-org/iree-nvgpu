@@ -108,11 +108,32 @@ class CuDNNOperationGraph : public iree::vm::RefObject<CuDNNOperationGraph> {
                       cudnn_frontend::OperationGraph graph);
   ~CuDNNOperationGraph();
 
-  const cudnn_frontend::OperationGraph& graph() const;
+  cudnn_frontend::OperationGraph& graph();
 
  private:
   openxla_cudnn_dynamic_symbols_t* syms_;
   std::optional<cudnn_frontend::OperationGraph> graph_;
+};
+
+//===----------------------------------------------------------------------===//
+// CuDNN executable.
+//===----------------------------------------------------------------------===//
+
+// CuDNN executable encapsulates all the details of configuring cuDNN engines
+// and execution plans for the given operation graph: filtering available engine
+// configs, selecting the best engine config using cuDNN heuristics, auto-tuning
+// at run time to find the best-performing config.
+class CuDNNExecutable : public iree::vm::RefObject<CuDNNExecutable> {
+ public:
+  CuDNNExecutable(openxla_cudnn_dynamic_symbols_t* syms,
+                  CuDNNOperationGraph& graph,
+                  iree::span<const cudnn_frontend::ExecutionPlan> plans);
+  ~CuDNNExecutable();
+
+ private:
+  openxla_cudnn_dynamic_symbols_t* syms_;
+  iree::vm::ref<CuDNNOperationGraph> graph_;
+  std::vector<cudnn_frontend::ExecutionPlan> plans_;
 };
 
 //===----------------------------------------------------------------------===//
@@ -140,6 +161,11 @@ iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
     iree::span<CuDNNTensor* const> results);
 
+// Creates an executable from the operation graph.
+iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
+    CuDNNOperationGraph& graph);
+
 //===----------------------------------------------------------------------===//
 // Helper functions for setting up cuDNN descriptors.
 //===----------------------------------------------------------------------===//
@@ -162,5 +188,7 @@ IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_tensor,
                               openxla::runtime::nvgpu::CuDNNTensor);
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_operation_graph,
                               openxla::runtime::nvgpu::CuDNNOperationGraph);
+IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_executable,
+                              openxla::runtime::nvgpu::CuDNNExecutable);
 
 #endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_

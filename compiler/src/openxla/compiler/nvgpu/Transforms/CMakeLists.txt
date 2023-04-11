@@ -17,12 +17,14 @@ iree_cc_library(
     "Passes.h"
     "Passes.h.inc"
   SRCS
-    "Sample.cpp"
+    "ConvertMHLOToCUDNN.cpp"
   DEPS
     ::PassesIncGen
+    MhloDialect
     MLIRIR
     MLIRPass
     openxla::compiler::nvgpu::defs
+    openxla::compiler::nvgpu::Dialect::CUDNN::IR
   PUBLIC
 )
 

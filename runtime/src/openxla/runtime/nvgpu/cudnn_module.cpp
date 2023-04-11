@@ -14,6 +14,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <memory>
 
 #include "iree/hal/drivers/cuda/cuda_device.h"
@@ -36,7 +37,10 @@ class CuDNNModuleState {
   CuDNNModuleState(openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
   ~CuDNNModuleState();
 
+  enum class TensorFormat { kRowMajor, kChannelsLast };
+
   // Creates a new tensor for cuDNN graph argument.
+  template <TensorFormat format = TensorFormat::kRowMajor>
   StatusOr<vm::ref<CuDNNTensor>> Argument(int64_t dtype,
                                           const vm::ref<iree_vm_list_t> dims,
                                           int64_t uid, int64_t alignment);
@@ -46,6 +50,11 @@ class CuDNNModuleState {
                                                float lower_clip,
                                                float upper_clip, int64_t uid,
                                                int64_t alignment);
+
+  // Creates a convolution operation and returns result tensor.
+  StatusOr<vm::ref<CuDNNTensor>> Convolution(const vm::ref<CuDNNTensor> input,
+                                             const vm::ref<CuDNNTensor> filter,
+                                             int64_t uid, int64_t alignment);
 
   // TODO(ezhulenev): To be able to pass a list of tensors, `!cudnn.tensor` has
   // to be registered as a ref type (see `IREE::VM::RefType` and`!vmvx.buffer`
@@ -98,19 +107,16 @@ static StatusOr<std::vector<int64_t>> LoadI64Vec(const iree_vm_list_t* list) {
   return vector;
 }
 
-static std::vector<int64_t> GetRowMajorStrides(span<const int64_t> dims) {
-  std::vector<int64_t> strides(dims.size(), 1);
-  for (int64_t i = dims.size() - 2; i >= 0; --i)
-    strides[i] = dims[i] * strides[i + 1];
-  return strides;
-}
-
+template <CuDNNModuleState::TensorFormat format>
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Argument(
     int64_t dtype, const vm::ref<iree_vm_list_t> dims, int64_t uid,
     int64_t alignment) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
   IREE_ASSIGN_OR_RETURN(std::vector<int64_t> dimensions, LoadI64Vec(&*dims));
-  std::vector<int64_t> strides = GetRowMajorStrides(dimensions);
+
+  std::vector<int64_t> strides = format == TensorFormat::kRowMajor
+                                     ? GetRowMajorStrides(dimensions)
+                                     : GetChannelsLastStrides(dimensions);
   return CreateArgument(&syms_, dimensions, strides, uid, data_type, alignment);
 }
 
@@ -134,17 +140,41 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
                              alignment);
 }
 
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
+    const vm::ref<CuDNNTensor> input, const vm::ref<CuDNNTensor> filter,
+    int64_t uid, int64_t alignment) {
+  return CreateConvolution(&syms_, *input, *filter, uid, alignment);
+}
+
 StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::CreateGraph(
     const vm::ref<CuDNNTensor> tensor) {
   return CreateOperationGraph(&syms_, handle_, {tensor.get()});
 }
 
+//===----------------------------------------------------------------------===//
+// Functions dispatch table for CuDNNModuleState.
+//===----------------------------------------------------------------------===//
+
+using iree::vm::MakeNativeFunction;
+
+static constexpr CuDNNModuleState::TensorFormat NHWC =
+    CuDNNModuleState::TensorFormat::kChannelsLast;
+
 static const vm::NativeFunction<CuDNNModuleState> kCuDNNModuleFunctions[] = {
-    vm::MakeNativeFunction("tensor.arg", &CuDNNModuleState::Argument),
-    vm::MakeNativeFunction("pointwise_relu", &CuDNNModuleState::PointwiseRelu),
-    vm::MakeNativeFunction("graph.create", &CuDNNModuleState::CreateGraph),
-    vm::MakeNativeFunction("debug.tensor", &CuDNNModuleState::PrintTensorDebug),
-    vm::MakeNativeFunction("debug.graph", &CuDNNModuleState::PrintGraphDebug),
+    // Tensor arguments
+    MakeNativeFunction("tensor.arg", &CuDNNModuleState::Argument<>),
+    MakeNativeFunction("tensor.arg.nhwc", &CuDNNModuleState::Argument<NHWC>),
+
+    // cuDNN operations
+    MakeNativeFunction("pointwise_relu", &CuDNNModuleState::PointwiseRelu),
+    MakeNativeFunction("convolution", &CuDNNModuleState::Convolution),
+
+    // cuDNN graph construction
+    MakeNativeFunction("graph.create", &CuDNNModuleState::CreateGraph),
+
+    // Debugging operations
+    MakeNativeFunction("debug.tensor", &CuDNNModuleState::PrintTensorDebug),
+    MakeNativeFunction("debug.graph", &CuDNNModuleState::PrintGraphDebug),
 };
 
 //===----------------------------------------------------------------------===//

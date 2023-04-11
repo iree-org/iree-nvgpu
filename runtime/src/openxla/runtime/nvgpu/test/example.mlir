@@ -10,8 +10,16 @@ module @example {
     %dtype: i64, %dims: !util.list<i64>, %uid: i64, %alignment: i64
   ) -> !cudnn.tensor
 
+  func.func private @cudnn.tensor.arg.nhwc(
+    %dtype: i64, %dims: !util.list<i64>, %uid: i64, %alignment: i64
+  ) -> !cudnn.tensor
+
   func.func private @cudnn.pointwise_relu(
     %input: !cudnn.tensor, %lower: f32, %upper: f32, %uid: i64, %alignment: i64
+  ) -> !cudnn.tensor
+
+  func.func private @cudnn.convolution(
+    %input: !cudnn.tensor, %filter: !cudnn.tensor, %uid: i64, %alignment: i64
   ) -> !cudnn.tensor
 
   func.func private @cudnn.graph.create(
@@ -38,56 +46,59 @@ module @example {
     %c2 = arith.constant 2 : index
     %c3 = arith.constant 3 : index
 
-    %c128 = arith.constant 128 : i64
-
-    // Tensor UIDs
-    %uid0 = arith.constant 0 : i64
-    %uid1 = arith.constant 1 : i64
-
-    // [128, 128, 128, 128]
-    %dims = util.list.create %rank : !util.list<i64>
-    util.list.resize %dims, %rank : !util.list<i64>
-    util.list.set %dims[%c0], %c128 : !util.list<i64>
-    util.list.set %dims[%c1], %c128 : !util.list<i64>
-    util.list.set %dims[%c2], %c128 : !util.list<i64>
-    util.list.set %dims[%c3], %c128 : !util.list<i64>
-
     // CUDNN_DATA_FLOAT
     %dtype = arith.constant 0 : i64
 
     // Tensor alignment
-    %alignment = arith.constant 32 : i64
+    %align = arith.constant 32 : i64
 
-    // Create !cudnn.tensor<128x128x128x128xf32>
-    %0 = call @cudnn.tensor.arg(%dtype, %dims, %uid0, %alignment)
-           : (i64, !util.list<i64>, i64, i64) -> !cudnn.tensor
+    // Dimension values
+    %d32 = arith.constant 32 : i64
+    %d8 = arith.constant 8 : i64
+    %d4 = arith.constant 4 : i64
+    %d2 = arith.constant 2 : i64
 
-    // Create pointwise relu operation
-    %lower = arith.constant 0.0 : f32
-    %upper = arith.constant 9.0 : f32
-    %1 = call @cudnn.pointwise_relu(%0, %lower, %upper, %uid1, %alignment)
-           : (!cudnn.tensor, f32, f32, i64, i64) -> !cudnn.tensor
+    // Tensor UIDs
+    %uid0 = arith.constant 0 : i64 // input
+    %uid1 = arith.constant 1 : i64 // filter
+    %uid2 = arith.constant 1 : i64 // output
 
-    // CHECK: CUDNN_BACKEND_TENSOR_DESCRIPTOR : Datatype: CUDNN_DATA_FLOAT
-    // CHECK: Id: 123
-    // CHECK: Alignment: 32
-    // CHECK: nDims 4
-    // CHECK: VectorCount: 1
-    // CHECK: vectorDimension -1
-    // CHECK: Dim [ 128,128,128,128 ]
-    // CHECK: Str [ 2097152,16384,128,1 ]
-    // CHECK: isVirtual: 0
-    // CHECK: isByValue: 0
-    // CHECK: reorder_type: CUDNN_TENSOR_REORDERING_NONE
-    call @cudnn.debug.tensor(%0) : (!cudnn.tensor) -> ()
-    call @cudnn.debug.tensor(%1) : (!cudnn.tensor) -> ()
+    // Input: [8, 32, 4, 4]
+    %input_dims = util.list.create %rank : !util.list<i64>
+    util.list.resize %input_dims, %rank : !util.list<i64>
+    util.list.set %input_dims[%c0], %d8 : !util.list<i64>
+    util.list.set %input_dims[%c1], %d32 : !util.list<i64>
+    util.list.set %input_dims[%c2], %d4 : !util.list<i64>
+    util.list.set %input_dims[%c3], %d4 : !util.list<i64>
 
-    // Create an operation graph computing pointwise relu.
-    %2 = call @cudnn.graph.create(%1)
+    // Filter: [32, 32, 2, 2]
+    %filter_dims = util.list.create %rank : !util.list<i64>
+    util.list.resize %filter_dims, %rank : !util.list<i64>
+    util.list.set %filter_dims[%c0], %d32 : !util.list<i64>
+    util.list.set %filter_dims[%c1], %d32 : !util.list<i64>
+    util.list.set %filter_dims[%c2], %d2 : !util.list<i64>
+    util.list.set %filter_dims[%c3], %d2 : !util.list<i64>
+
+    // Tensor arguments
+    %input = call @cudnn.tensor.arg.nhwc(%dtype, %input_dims, %uid0, %align)
+               : (i64, !util.list<i64>, i64, i64) -> !cudnn.tensor
+    %filter = call @cudnn.tensor.arg.nhwc(%dtype, %filter_dims, %uid1, %align)
+               : (i64, !util.list<i64>, i64, i64) -> !cudnn.tensor
+
+    // Create convolution operation
+    %conv = call @cudnn.convolution(%input, %filter, %uid2, %align)
+              : (!cudnn.tensor, !cudnn.tensor, i64, i64) -> !cudnn.tensor
+
+    // Debug all cuDNN tensors in the graph
+    call @cudnn.debug.tensor(%input) : (!cudnn.tensor) -> ()
+    call @cudnn.debug.tensor(%filter) : (!cudnn.tensor) -> ()
+    call @cudnn.debug.tensor(%conv) : (!cudnn.tensor) -> ()
+
+    // Create an operation graph computing convolution/
+    %2 = call @cudnn.graph.create(%conv)
            : (!cudnn.tensor) -> !cudnn.operation_graph
 
-    // CHECK: Graph: CUDNN_BACKEND_OPERATIONGRAPH_DESCRIPTOR has 1operations
-    // CHECK: Tag: ReluFwd_
+    // CHECK: Graph: CUDNN_BACKEND_OPERATIONGRAPH_DESCRIPTOR
     call @cudnn.debug.graph(%2) : (!cudnn.operation_graph) -> ()
 
     return

@@ -6,9 +6,12 @@
 
 #include "openxla/runtime/nvgpu/cudnn_module.h"
 
+#include <iree/base/assert.h>
+#include <iree/base/config.h>
 #include <iree/base/internal/dynamic_library.h>
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
+#include <iree/hal/buffer.h>
 #include <iree/hal/drivers/cuda/api.h>
 #include <iree/hal/drivers/cuda/dynamic_symbols.h>
 #include <iree/hal/drivers/cuda/status_util.h>
@@ -38,7 +41,8 @@ using namespace iree;
 
 class CuDNNModuleState {
  public:
-  CuDNNModuleState(iree_hal_cuda_dynamic_symbols_t cuda_syms,
+  CuDNNModuleState(iree_hal_device_t* device, iree_allocator_t host_allocator,
+                   iree_hal_cuda_dynamic_symbols_t cuda_syms,
                    openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
   ~CuDNNModuleState();
 
@@ -73,6 +77,19 @@ class CuDNNModuleState {
   StatusOr<vm::ref<CuDNNExecutable>> Executable(
       const vm::ref<CuDNNOperationGraph> graph);
 
+  // TODO(ezhulenev): This is proof of concept for executing a cuDNN graph with
+  // a single convolution operation. We need to figure out how to pass a list
+  // of buffers to graph inputs, and potentially return multiple results.
+
+  // Executes cuDNN executable with given HAL buffer view inputs and returns
+  // result as a HAL buffer view.
+  StatusOr<vm::ref<iree_hal_buffer_view_t>> Execute(
+      const vm::ref<CuDNNExecutable> executable,
+      const vm::ref<iree_hal_buffer_view_t> input,
+      const vm::ref<iree_hal_buffer_view_t> filter,
+      const vm::ref<iree_hal_fence_t> wait_fence,
+      const vm::ref<iree_hal_fence_t> signal_fence);
+
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
 
@@ -83,6 +100,9 @@ class CuDNNModuleState {
   CuDNNModuleState(const CuDNNModuleState&) = delete;
   CuDNNModuleState& operator=(const CuDNNModuleState&) = delete;
 
+  iree_hal_device_t* device_;
+  iree_allocator_t host_allocator_;
+
   iree_hal_cuda_dynamic_symbols_t cuda_syms_;
   openxla_cudnn_dynamic_symbols_t syms_;
 
@@ -92,10 +112,16 @@ class CuDNNModuleState {
   cudnnHandle_t handle_;
 };
 
-CuDNNModuleState::CuDNNModuleState(iree_hal_cuda_dynamic_symbols_t cuda_syms,
+CuDNNModuleState::CuDNNModuleState(iree_hal_device_t* device,
+                                   iree_allocator_t host_allocator,
+                                   iree_hal_cuda_dynamic_symbols_t cuda_syms,
                                    openxla_cudnn_dynamic_symbols_t syms,
                                    cudnnHandle_t handle)
-    : cuda_syms_(cuda_syms), syms_(syms), handle_(handle) {}
+    : device_(device),
+      host_allocator_(host_allocator),
+      cuda_syms_(cuda_syms),
+      syms_(syms),
+      handle_(handle) {}
 
 CuDNNModuleState::~CuDNNModuleState() {
   CUDNN_STATUS_CHECK_OK(&syms_, cudnnDestroy(handle_));
@@ -167,6 +193,80 @@ StatusOr<vm::ref<CuDNNExecutable>> CuDNNModuleState::Executable(
   return CreateExecutable(&syms_, handle_, *graph);
 }
 
+StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
+    const vm::ref<CuDNNExecutable> executable,
+    const vm::ref<iree_hal_buffer_view_t> input,
+    const vm::ref<iree_hal_buffer_view_t> filter,
+    const vm::ref<iree_hal_fence_t> wait_fence,
+    const vm::ref<iree_hal_fence_t> signal_fence) {
+  // Arguments and results defined by the operation graph.
+  std::vector<CuDNNTensor*> args = executable->graph().args();
+  std::vector<CuDNNTensor*> rets = executable->graph().rets();
+
+  // TODO(ezhulenev): Remove this asserts once we support more complex graphs.
+  IREE_ASSERT_EQ(args.size(), 2);
+  IREE_ASSERT_EQ(rets.size(), 1);
+
+  // Tensors required for running single convolution operation.
+  // const cudnn_frontend::Tensor& input = args[0]->tensor();
+  // const cudnn_frontend::Tensor& filter = args[1]->tensor();
+  const cudnn_frontend::Tensor& output = rets[0]->tensor();
+
+  // Allocate buffer for tensor output.
+  iree_hal_buffer_params_t output_buffer_params = {
+      /*.usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT | IREE_HAL_BUFFER_USAGE_MAPPING,
+      /*.access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+      /*.type=*/IREE_HAL_MEMORY_TYPE_OPTIMAL_FOR_DEVICE |
+          IREE_HAL_MEMORY_TYPE_HOST_VISIBLE,
+      /*.queue_affinity=*/IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*.min_alignment=*/static_cast<iree_host_size_t>(output.getAlignment()),
+  };
+
+  vm::ref<iree_hal_semaphore_t> semaphore;
+  IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(device_, 0, &semaphore));
+  vm::ref<iree_hal_fence_t> alloca_fence;
+  IREE_RETURN_IF_ERROR(iree_hal_fence_create_at(
+      semaphore.get(), 1, host_allocator_, &alloca_fence));
+
+  // TODO(ezhulenev): Add support for all cuDNN data types.
+  IREE_ASSERT_EQ(output.getDataType(), CUDNN_DATA_FLOAT);
+  int64_t output_byte_length = output.getPackedElementCount() * sizeof(float);
+
+  vm::ref<iree_hal_buffer_t> output_buffer;
+  IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
+      device_, IREE_HAL_QUEUE_AFFINITY_ANY,
+      iree_hal_fence_semaphore_list(wait_fence.get()),
+      iree_hal_fence_semaphore_list(alloca_fence.get()),
+      IREE_HAL_ALLOCATOR_POOL_DEFAULT, output_buffer_params, output_byte_length,
+      &output_buffer));
+
+  // Wait for the alloca fence before executing cuDNN graph.
+  IREE_RETURN_IF_ERROR(
+      iree_hal_fence_wait(alloca_fence.get(), iree_infinite_timeout()));
+
+  std::vector<iree_hal_buffer_t*> buffers = {
+      iree_hal_buffer_view_buffer(input.get()),
+      iree_hal_buffer_view_buffer(filter.get()), output_buffer.get()};
+
+  // TODO(ezhulenev): Allocate workspace required for running executable.
+  IREE_RETURN_IF_ERROR(executable->Execute(handle_, buffers));
+
+  // Signal fence after completing execution.
+  IREE_RETURN_IF_ERROR(iree_hal_fence_signal(signal_fence.get()));
+
+  // Wrap the buffer in a buffer view that provides the metadata for
+  // runtime verification.
+  vm::ref<iree_hal_buffer_view_t> output_view;
+  std::vector<iree_host_size_t> dims(output.getDim(),
+                                     output.getDim() + output.getDimCount());
+  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_create(
+      output_buffer.get(), dims.size(), dims.data(),
+      IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+      host_allocator_, &output_view));
+
+  return output_view;
+}
+
 //===----------------------------------------------------------------------===//
 // Functions dispatch table for CuDNNModuleState.
 //===----------------------------------------------------------------------===//
@@ -190,6 +290,9 @@ static const vm::NativeFunction<CuDNNModuleState> kCuDNNModuleFunctions[] = {
 
     // cuDNN executable construction
     MakeNativeFunction("executable.create", &CuDNNModuleState::Executable),
+
+    // Execute cuDNN executable with buffer inputs
+    MakeNativeFunction("execute", &CuDNNModuleState::Execute),
 
     // Debugging operations
     MakeNativeFunction("debug.tensor", &CuDNNModuleState::PrintTensorDebug),
@@ -248,7 +351,8 @@ StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
   // immediately after device is created, however it might not always be true?
   CUDNN_RETURN_IF_ERROR(&syms, cudnnCreate(&handle), "cudnnCreate");
 
-  return std::make_unique<CuDNNModuleState>(cuda_syms, syms, handle);
+  return std::make_unique<CuDNNModuleState>(device_.get(), host_allocator,
+                                            cuda_syms, syms, handle);
 }
 
 }  // namespace openxla::runtime::nvgpu

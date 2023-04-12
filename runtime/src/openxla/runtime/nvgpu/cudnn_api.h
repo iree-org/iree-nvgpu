@@ -10,6 +10,7 @@
 #define NV_CUDNN_DISABLE_EXCEPTION
 
 #include <cudnn_frontend.h>
+#include <iree/hal/buffer.h>
 #include <iree/vm/ref_cc.h>
 
 #include <optional>
@@ -105,14 +106,27 @@ class CuDNNOpResultTensor final : public CuDNNTensor {
 class CuDNNOperationGraph : public iree::vm::RefObject<CuDNNOperationGraph> {
  public:
   CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
-                      cudnn_frontend::OperationGraph graph);
+                      cudnn_frontend::OperationGraph graph,
+                      iree::span<CuDNNTensor* const> args,
+                      iree::span<CuDNNTensor* const> rets);
   ~CuDNNOperationGraph();
 
   cudnn_frontend::OperationGraph& graph();
 
+  std::vector<CuDNNTensor*> args() const;
+  std::vector<CuDNNTensor*> rets() const;
+
+  iree::span<const int64_t> uids() const;
+
  private:
   openxla_cudnn_dynamic_symbols_t* syms_;
   std::optional<cudnn_frontend::OperationGraph> graph_;
+
+  std::vector<iree::vm::ref<CuDNNTensor>> args_;
+  std::vector<iree::vm::ref<CuDNNTensor>> rets_;
+  
+  // Ids of tensors in `args_` and `rets_`.
+  std::vector<int64_t> uids_;
 };
 
 //===----------------------------------------------------------------------===//
@@ -129,6 +143,16 @@ class CuDNNExecutable : public iree::vm::RefObject<CuDNNExecutable> {
                   CuDNNOperationGraph& graph,
                   iree::span<const cudnn_frontend::ExecutionPlan> plans);
   ~CuDNNExecutable();
+
+  const CuDNNOperationGraph& graph() const;
+
+  // Executes operation graph with user provided buffers using one of the
+  // available execution plans.
+  iree::Status Execute(cudnnHandle_t handle,
+                       iree::span<iree_hal_buffer_t* const> buffers);
+
+  // TODO(ezhulenev): Add functions for auto-tuning executable to pick the best
+  // performing execution plan at run time.
 
  private:
   openxla_cudnn_dynamic_symbols_t* syms_;
@@ -159,7 +183,7 @@ iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateConvolution(
 // Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    iree::span<CuDNNTensor* const> results);
+    iree::span<CuDNNTensor* const> rets);
 
 // Creates an executable from the operation graph.
 iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(

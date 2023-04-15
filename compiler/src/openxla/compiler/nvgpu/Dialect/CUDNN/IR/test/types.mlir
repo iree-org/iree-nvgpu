@@ -1,4 +1,4 @@
-// RUN: iree-opt --iree-plugin=openxla_nvgpu %s \| iree-opt --iree-plugin=openxla_nvgpu | FileCheck %s
+// RUN: iree-opt --iree-plugin=openxla_nvgpu %s | iree-opt --iree-plugin=openxla_nvgpu | FileCheck %s
 
 #map = affine_map<(d0, d1, d2) -> (d0, d2, d1)>
 

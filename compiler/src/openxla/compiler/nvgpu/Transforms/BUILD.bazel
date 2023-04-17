@@ -37,7 +37,7 @@ cc_library(
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",
-        "@mlir-hlo//:mlir_hlo",
+        "@mlir-hlo//stablehlo:stablehlo_ops",
     ],
 )
 

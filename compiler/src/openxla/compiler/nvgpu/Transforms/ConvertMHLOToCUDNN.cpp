@@ -1,4 +1,4 @@
-// Copyright 2023 The IREE Authors
+// Copyright 2023 The OpenXLA Authors
 //
 // Licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <numeric>
 
-#include "mhlo/IR/hlo_ops.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -17,6 +16,7 @@
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
+#include "stablehlo/dialect/StablehloOps.h"
 
 #define GEN_PASS_DEF_CONVERTMHLOTOCUDNN
 #include "openxla/compiler/nvgpu/Transforms/Passes.h.inc"
@@ -45,10 +45,10 @@ static cudnn::TensorDescType getTensorDescType(TensorType tensor_type) {
 
 namespace {
 
-struct ConvertClamp : public OpRewritePattern<mhlo::ClampOp> {
-  using OpRewritePattern<mhlo::ClampOp>::OpRewritePattern;
+struct ConvertClamp : public OpRewritePattern<stablehlo::ClampOp> {
+  using OpRewritePattern<stablehlo::ClampOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(mhlo::ClampOp op,
+  LogicalResult matchAndRewrite(stablehlo::ClampOp op,
                                 PatternRewriter& rewriter) const override {
     llvm::APFloat min = llvm::APFloat::IEEEdouble();
     if (!matchPattern(op.getMin().getDefiningOp(), m_ConstantFloat(&min))) {

@@ -1,4 +1,4 @@
-//===- CUDNNOps.td - CUDNN dialect ops -----------*- tablegen -*-===//
+//===- CUDNNOps.td - CUDNN dialect ops ---------------------*- tablegen -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -9,9 +9,13 @@
 #ifndef CUDNN_OPS
 #define CUDNN_OPS
 
-include "mlir/IR/OpBase.td"
 include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.td"
 include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.td"
+include "mlir/IR/OpBase.td"
+include "mlir/IR/FunctionInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/CallInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -189,6 +193,103 @@ def CUDNN_GetCurrentHandle : CUDNN_Op<"get_current_handle", [Pure]> {
     let arguments = (ins);
     let results = (outs CUDNN_HandleType:$handle);
     let assemblyFormat = [{ attr-dict type($handle) }];
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.graph operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_GraphOp : CUDNN_Op<"graph", [
+    IsolatedFromAbove,
+    FunctionOpInterface,
+    CallableOpInterface,
+    Symbol
+  ]> {
+  let summary = "operation defining cuDNN graph building function";
+
+  let description = [{
+    Represents a function building a cuDNN graph from a cuDNN operations. At
+    run time this operation lowered to vm function calling into cuDNN module API
+    to construct a cuDNN operation graph object.
+  }];
+
+  let arguments = (ins
+    TypeAttrOf<FunctionType>:$function_type,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
+    OptionalAttr<DictArrayAttr>:$res_attrs
+  );
+
+  let regions = (region AnyRegion:$body);
+
+  let extraClassDeclaration = [{
+    /// Returns the argument types of cuDNN graph.
+    llvm::ArrayRef<mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
+
+    /// Returns the result types of this cuDNN graph.
+    llvm::ArrayRef<mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
+
+    /// Hook for OpTrait::FunctionLike, called after verifying that the 'type'
+    /// attribute is present. This can check for preconditions of the
+    /// getNumArguments hook not failing.
+    mlir::LogicalResult verifyType();
+
+    /// CallableOpInterface implementation.
+    mlir::Region *getCallableRegion() { return &getBody(); }
+    llvm::ArrayRef<mlir::Type> getCallableResults() {
+      return getFunctionType().getResults();
+    }
+    mlir::ArrayAttr getCallableArgAttrs() {
+      return getArgAttrs().value_or(nullptr);
+    }
+    mlir::ArrayAttr getCallableResAttrs() {
+      return getResAttrs().value_or(nullptr);
+    }
+  }];
+
+  let hasCustomAssemblyFormat = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.return operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_ReturnOp : CUDNN_Op<"return", [
+    Pure,
+    ReturnLike,
+    Terminator,
+    HasParent<"::openxla::compiler::nvgpu::cudnn::GraphOp">
+  ]> {
+  let summary = "return operation";
+  let description = [{
+    Represents a return operation within a cuDNN graph.
+
+    ```
+    cudnn.graph @foo(%arg: !cudnn.tensor<?x?x?xf32>)
+                        -> !cudnn.tensor<?x?x?xf32> {
+      %0 = ... : !cudnn.tensor<?x?x?xf32>
+      return %0: !cudnn.tensor<?x?x?xf32>
+    }
+    ```
+  }];
+
+  let arguments = (ins
+    Variadic<CUDNN_TensorType>:$operands
+  );
+
+  let assemblyFormat = [{
+    attr-dict ($operands^ `:` type($operands))?
+  }];
+
+  let builders = [
+    OpBuilder<(ins),
+    [{
+      build($_builder, $_state, std::nullopt);
+    }]>,
+  ];
 }
 
 #endif // CUDNN_OPS

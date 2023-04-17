@@ -34,11 +34,7 @@ static ParseResult parseDimensionList(AsmParser &parser,
 
 static void printDimensionList(AsmPrinter &printer, ArrayRef<int64_t> dims,
                                Type type) {
-  auto print = [&](int64_t dim) {
-    ShapedType::isDynamic(dim) ? printer << "?" : printer << dim;
-  };
-  llvm::interleave(dims, printer.getStream(), print, "x");
-  if (!dims.empty()) printer << 'x';
+  for (auto d : dims) printer << (ShapedType::isDynamic(d) ? '?' : d) << "x";
   printer << type;
 }
 

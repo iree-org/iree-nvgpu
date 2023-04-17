@@ -10,6 +10,7 @@
 #define CUDNN_TYPES
 
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.td"
 
 //===----------------------------------------------------------------------===//
@@ -58,6 +59,101 @@ def CUDNN_TensorDescType : CUDNN_Type<"TensorDesc", "tensor_desc"> {
       `<` custom<DimensionList>($shape, $element_type) `,` `alignment` `=` $alignment `,`
       `stride` `=` `[` $stride `]` `>`
     }];
+}
+
+//===----------------------------------------------------------------------===//
+// cuDNN data layout formats
+//===----------------------------------------------------------------------===//
+
+// cuDNN supports a generic way of specifying tensor layouts with strides,
+// however there are a few widely used data layouts supported by cuDNN
+// operations, that we define as an enum attribute to avoid always passing
+// around affine maps.
+
+// 4-D Tensor layouts.
+//
+// In cuDNN 4-D tensors always have their logical dimensions as NCHW (batch,
+// channels aka feature maps, height, width). Tensor layout defines how these
+// logical dimensions layed out in memory.
+//
+// Example:
+//   `!cudnn.tensor<1x64x32x32xf32, NHWC>` is equivalent to `memref<1x32x32x64>`
+//   physical memory layout
+//
+// NCHW tensor layout is a simple row-major layout.
+def CUDNN_LAYOUT_NCHW : I32EnumAttrCase<"NCHW", 1>;
+def CUDNN_LAYOUT_NHWC : I32EnumAttrCase<"NHWC", 2>;
+
+def CUDNN_Layout : I32EnumAttr<"Layout",
+    "cuDNN data layout format",
+    [
+      CUDNN_LAYOUT_NCHW,
+      CUDNN_LAYOUT_NHWC
+    ]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::openxla::compiler::nvgpu::cudnn";
+}
+
+def CUDNN_LayoutAttr : EnumAttr<CUDNN_Dialect, CUDNN_Layout, "layout">;
+
+//===----------------------------------------------------------------------===//
+// !cudnn.tensor type
+//===----------------------------------------------------------------------===//
+
+def CUDNN_TensorType : CUDNN_Type<"Tensor", "tensor"> {
+    let summary = "cuDNN Tensor";
+    let description = [{
+      CuDNN tensor type describing memory shape, data type and layout. This type
+      corresponds to the cuDNN tensor descriptor, however at run time cuDNN
+      tensors have additional parameters that are not know or important at
+      compile time (e.g. `virtual` flag and memory alignment).
+
+      Shape and layout can be omitted from the type when lowering to the runtime
+      function calls (just a `!cudnn.tensor`). At run time, shape, type and
+      layout become a property of reference counted runtime values.
+
+      See cuDNN documentation:
+      https://docs.nvidia.com/deeplearning/cudnn/developer-guide/index.html#tensors-layouts
+    }];
+
+    let parameters = (ins
+      ArrayRefParameter<"int64_t">:$shape,
+      "Type":$elementType,
+      "std::optional<Layout>":$layout,
+      "mlir::AffineMap":$strides
+    );
+
+    let builders = [
+      TypeBuilder<(ins), [{
+        return $_get($_ctxt, ArrayRef<int64_t>(), Type(),
+                     std::nullopt, AffineMap());
+      }]>,
+      TypeBuilderWithInferredContext<(ins "llvm::ArrayRef<int64_t>":$shape,
+                                          "Type":$elementType), [{
+        return $_get(elementType.getContext(), shape, elementType,
+                     std::nullopt, AffineMap());
+      }]>,
+      TypeBuilderWithInferredContext<(ins "llvm::ArrayRef<int64_t>":$shape,
+                                          "Type":$elementType,
+                                          "Layout":$layout), [{
+        return $_get(elementType.getContext(), shape, elementType,
+                     layout, AffineMap());
+      }]>,
+      TypeBuilderWithInferredContext<(ins "llvm::ArrayRef<int64_t>":$shape, 
+                                          "Type":$elementType,
+                                          "mlir::AffineMap":$strides), [{
+        return $_get(elementType.getContext(), shape, elementType,
+                     std::nullopt, strides);
+      }]>
+    ];
+
+    let extraClassDeclaration = [{
+      bool isOpaque();
+    }];
+
+    let hasCustomAssemblyFormat = 1;
+    let skipDefaultBuilders = 1;
+    let genVerifyDecl = 1;
 }
 
 #endif // CUDNN_TYPES

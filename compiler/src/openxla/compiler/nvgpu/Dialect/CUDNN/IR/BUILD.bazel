@@ -49,6 +49,7 @@ cc_library(
         "CUDNNTypes.cpp.inc",
     ],
     deps = [
+        ":CUDNNEnumsGen",
         ":CUDNNOpsGen",
         ":CUDNNTypesGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
@@ -93,6 +94,23 @@ iree_gentbl_cc_library(
         (
             ["--gen-typedef-defs"],
             "CUDNNTypes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUDNNTypes.td",
+    deps = [":td_files"],
+)
+
+iree_gentbl_cc_library(
+    name = "CUDNNEnumsGen",
+    tbl_outs = [
+        (
+            ["--gen-enum-decls"],
+            "CUDNNEnums.h.inc",
+        ),
+        (
+            ["--gen-enum-defs"],
+            "CUDNNEnums.cpp.inc",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",

@@ -11,8 +11,9 @@
 #define CUDNN_CUDNNTYPES_H
 
 #include "mlir/IR/BuiltinTypes.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNEnums.h.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h.inc"
 
-#endif // CUDNN_CUDNNTYPES_H
+#endif  // CUDNN_CUDNNTYPES_H

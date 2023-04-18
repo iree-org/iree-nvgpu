@@ -216,10 +216,8 @@ static iree_status_t RegisterType(iree_vm_instance_t* instance,
   descriptor.offsetof_counter = T::offsetof_counter();
   descriptor.destroy = T::DirectDestroy;
 
-  IREE_RETURN_IF_ERROR(
-      iree_vm_instance_register_type(instance, &descriptor, out_registration));
-
-  return iree_ok_status();
+  return iree_vm_instance_register_type(instance, &descriptor,
+                                        out_registration);
 }
 
 extern "C" iree_status_t iree_custom_module_cudnn_create(

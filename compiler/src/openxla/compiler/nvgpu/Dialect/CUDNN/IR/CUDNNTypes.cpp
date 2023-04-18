@@ -34,7 +34,8 @@ static ParseResult parseDimensionList(AsmParser &parser,
 
 static void printDimensionList(AsmPrinter &printer, ArrayRef<int64_t> dims,
                                Type type) {
-  for (auto d : dims) printer << (ShapedType::isDynamic(d) ? '?' : d) << "x";
+  for (auto dim : dims)
+    (ShapedType::isDynamic(dim) ? printer << '?' : printer << dim) << "x";
   printer << type;
 }
 

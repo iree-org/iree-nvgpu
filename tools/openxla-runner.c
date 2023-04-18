@@ -38,6 +38,10 @@ int main(int argc, char** argv) {
   IREE_CHECK_OK(iree_runtime_instance_create(&instance_options, host_allocator,
                                              &instance));
 
+  // Register custom types define by cuDNN module.
+  IREE_CHECK_OK(iree_custom_module_cudnn_register_types(
+      iree_runtime_instance_vm_instance(instance)));
+
   // Try to create the CUDA device.
   iree_hal_device_t* device = NULL;
   IREE_CHECK_OK(iree_runtime_instance_try_create_default_device(

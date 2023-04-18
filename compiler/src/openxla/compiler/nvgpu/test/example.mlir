@@ -2,15 +2,15 @@
 
 !tensor = tensor<1x16x32x8xf32>
 
+// CHECK: cudnn.graph @stablehlo.clamp
+// CHECK:   cudnn.pointwise_relu
+// CHECK:   cudnn.return
+
+// CHECK: func.func @conv
 func.func @conv(%argument: !tensor) -> !tensor {
-  %min = mhlo.constant dense<0.0> : !tensor
-  %max = mhlo.constant dense<0xFFFFFFFF> : !tensor
-  // CHECK: cudnn.pointwise_relu(%0) type = f32 lower_clip = 0.000000e+00
-  // CHECK-SAME: -> !cudnn.tensor_desc<
-  // CHECK-SAME:      1x16x32x8xf32,
-  // CHECK-SAME:      alignment = 0,
-  // CHECK-SAME:      stride = [4096, 256, 8, 1]
-  // CHECK-SAME:    >
-  %result = mhlo.clamp %min, %argument, %max : !tensor
+  %min = stablehlo.constant dense<0.0> : !tensor
+  %max = stablehlo.constant dense<0xFFFFFFFF> : !tensor
+  // CHECK: cudnn.call @stablehlo.clamp
+  %result = stablehlo.clamp %min, %argument, %max : !tensor
   return %result : !tensor
 }

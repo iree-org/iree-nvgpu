@@ -207,14 +207,18 @@ StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
 using namespace openxla::runtime::nvgpu;
 
 template <typename T>
-static iree_status_t RegisterType(iree_vm_ref_type_descriptor_t* descriptor,
-                                  const char* type_name) {
-  if (descriptor->type == IREE_VM_REF_TYPE_NULL) {
-    descriptor->type_name = iree_make_cstring_view(type_name);
-    descriptor->offsetof_counter = T::offsetof_counter();
-    descriptor->destroy = T::DirectDestroy;
-    return iree_vm_ref_register_type(descriptor);
-  }
+static iree_status_t RegisterType(iree_vm_instance_t* instance,
+                                  const char* type_name,
+                                  iree_vm_ref_type_t* out_registration) {
+  static iree_vm_ref_type_descriptor_t descriptor = {0};
+
+  descriptor.type_name = iree_make_cstring_view(type_name);
+  descriptor.offsetof_counter = T::offsetof_counter();
+  descriptor.destroy = T::DirectDestroy;
+
+  IREE_RETURN_IF_ERROR(
+      iree_vm_instance_register_type(instance, &descriptor, out_registration));
+
   return iree_ok_status();
 }
 
@@ -234,9 +238,10 @@ extern "C" iree_status_t iree_custom_module_cudnn_create(
 
 extern "C" iree_status_t iree_custom_module_cudnn_register_types(
     iree_vm_instance_t* instance) {
-  IREE_RETURN_IF_ERROR(
-      RegisterType<CuDNNTensor>(&cudnn_tensor_descriptor, "cudnn.tensor"));
+  IREE_RETURN_IF_ERROR(RegisterType<CuDNNTensor>(instance, "cudnn.tensor",
+                                                 &cudnn_tensor_registration));
+
   IREE_RETURN_IF_ERROR(RegisterType<CuDNNOperationGraph>(
-      &cudnn_operation_graph_descriptor, "cudnn.operation_graph"));
+      instance, "cudnn.operation_graph", &cudnn_operation_graph_registration));
   return iree_ok_status();
 }

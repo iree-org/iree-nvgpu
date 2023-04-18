@@ -32,18 +32,18 @@ module @example {
 
   func.func @main() {
     %rank = arith.constant 4 : index
-    
+
     %c0 = arith.constant 0 : index
     %c1 = arith.constant 1 : index
     %c2 = arith.constant 2 : index
     %c3 = arith.constant 3 : index
-    
+
     %c128 = arith.constant 128 : i64
 
     // Tensor UIDs
     %uid0 = arith.constant 0 : i64
     %uid1 = arith.constant 1 : i64
-    
+
     // [128, 128, 128, 128]
     %dims = util.list.create %rank : !util.list<i64>
     util.list.resize %dims, %rank : !util.list<i64>

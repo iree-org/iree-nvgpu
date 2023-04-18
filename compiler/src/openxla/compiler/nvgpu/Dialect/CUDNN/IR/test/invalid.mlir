@@ -18,3 +18,16 @@ cudnn.graph @g(%arg0: !cudnn.tensor) -> !cudnn.tensor {
 cudnn.graph @g(%arg0: !cudnn.tensor<?x?x?xf32>) {
   cudnn.return
 }
+
+// -----
+
+cudnn.graph @graph(%arg0: !cudnn.tensor<1x32x4x4xf32, NHWC>)
+                       -> !cudnn.tensor<1x32x4x4xf32, NHWC> {
+  cudnn.return %arg0: !cudnn.tensor<1x32x4x4xf32, NHWC>
+}
+
+func.func @main(%arg0: tensor<1x32x4x4xf32>) -> tensor<1x32x4x4xf32> {
+  // expected-error @+1 {{argument #0 shape [1, 32, 4, 4] doesn't match the expected shape [1, 4, 4, 32]}}
+  %0 = cudnn.call @graph(%arg0) : (tensor<1x32x4x4xf32>) -> tensor<1x32x4x4xf32>
+  return %0 : tensor<1x32x4x4xf32>
+}

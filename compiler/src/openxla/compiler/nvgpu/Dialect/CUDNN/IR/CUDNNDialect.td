@@ -36,7 +36,21 @@ def CUDNN_Dialect : Dialect {
 }
 
 //===----------------------------------------------------------------------===//
-// Base operation definition.
+// General types and helpers
+//===----------------------------------------------------------------------===//
+
+class CUDNN_SymbolRefAttr : Attr<CPred<"$_self.isa<mlir::FlatSymbolRefAttr>()">,
+                                       "symbol reference attribute"> {
+  let storageType = [{ mlir::FlatSymbolRefAttr }];
+  let returnType = [{ mlir::StringRef }];
+  let valueType = NoneType;
+  let constBuilderCall = "mlir::SymbolRefAttr::get($_builder.getContext(), $0)";
+}
+
+def CUDNN_GraphRefAttr : CUDNN_SymbolRefAttr;
+
+//===----------------------------------------------------------------------===//
+// Base operation definition
 //===----------------------------------------------------------------------===//
 
 class CUDNN_Op<string mnemonic, list<Trait> traits = []> :

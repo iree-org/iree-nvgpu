@@ -265,6 +265,7 @@ def CUDNN_ReturnOp : CUDNN_Op<"return", [
     HasParent<"::openxla::compiler::nvgpu::cudnn::GraphOp">
   ]> {
   let summary = "return operation";
+
   let description = [{
     Represents a return operation within a cuDNN graph.
 
@@ -291,6 +292,48 @@ def CUDNN_ReturnOp : CUDNN_Op<"return", [
       build($_builder, $_state, std::nullopt);
     }]>,
   ];
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.call operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_CallOp : CUDNN_Op<"call", [
+    CallOpInterface,
+    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  ]> {
+  let summary = "cuDNN call operation";
+
+  let description = [{
+    Calls a cuDNN graph with the given arguments.
+  }];
+
+  let arguments = (ins
+    CUDNN_GraphRefAttr:$callee,
+    Variadic<AnyRankedTensor>:$arguments
+  );
+
+  let results = (outs
+    Variadic<AnyRankedTensor>:$results
+  );
+
+  let assemblyFormat = [{
+    $callee `(` operands `)` attr-dict `:` functional-type(operands, results)
+  }];
+
+  let extraClassDeclaration = [{
+    /// Get the argument operands to the called function.
+    operand_range getArgOperands() {
+      return {arg_operand_begin(), arg_operand_end()};
+    }
+    operand_iterator arg_operand_begin() { return operand_begin(); }
+    operand_iterator arg_operand_end() { return operand_end(); }
+
+    /// Return the callee of this operation.
+    mlir::CallInterfaceCallable getCallableForCallee() {
+      return getOperation()->getAttrOfType<mlir::FlatSymbolRefAttr>("callee");
+    }
+  }];
 }
 
 #endif // CUDNN_OPS

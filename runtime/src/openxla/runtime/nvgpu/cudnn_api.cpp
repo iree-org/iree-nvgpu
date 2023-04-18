@@ -6,8 +6,6 @@
 
 #include "openxla/runtime/nvgpu/cudnn_api.h"
 
-#include <cudnn_frontend.h>
-#include <cudnn_frontend_Operation.h>
 #include <iree/base/assert.h>
 #include <iree/base/internal/span.h>
 #include <iree/base/status.h>
@@ -30,7 +28,7 @@ using cudnn_frontend::TensorBuilder;
 // clang-format on
 
 //===----------------------------------------------------------------------===//
-// CuDNNArgTensor.
+// CuDNNArgTensor
 //===----------------------------------------------------------------------===//
 
 CuDNNArgTensor::CuDNNArgTensor(openxla_cudnn_dynamic_symbols_t* syms,
@@ -47,7 +45,7 @@ const cudnn_frontend::Tensor& CuDNNArgTensor::tensor() const {
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOpResultTensor.
+// CuDNNOpResultTensor
 //===----------------------------------------------------------------------===//
 
 CuDNNOpResultTensor::CuDNNOpResultTensor(openxla_cudnn_dynamic_symbols_t* syms,
@@ -84,7 +82,7 @@ const cudnn_frontend::Tensor& CuDNNOpResultTensor::tensor() const {
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOperationGraph.
+// CuDNNOperationGraph
 //===----------------------------------------------------------------------===//
 
 CuDNNOperationGraph::CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
@@ -101,11 +99,11 @@ const cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Wrappers around cuDNN APIs export from a cuDNN module to the user.
+// Wrappers around cuDNN APIs export from a cuDNN module to the user
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// CreateArgument.
+// CreateArgument
 //===----------------------------------------------------------------------===//
 
 StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
@@ -125,7 +123,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
 }
 
 //===----------------------------------------------------------------------===//
-// CreatePointwiseRelu.
+// CreatePointwiseRelu
 //===----------------------------------------------------------------------===//
 
 StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
@@ -163,7 +161,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
 }
 
 //===----------------------------------------------------------------------===//
-// CreateConvolution.
+// CreateConvolution
 //===----------------------------------------------------------------------===//
 
 static int64_t GetFwdConvDilatedFilterDim(int64_t filter_dim,
@@ -265,7 +263,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
 }
 
 //===----------------------------------------------------------------------===//
-// CreateOperationGraph.
+// CreateOperationGraph
 //===----------------------------------------------------------------------===//
 
 template <typename To>
@@ -309,7 +307,7 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 }
 
 //===----------------------------------------------------------------------===//
-// Helper functions for setting up cuDNN descriptors.
+// Helper functions for setting up cuDNN descriptors
 //===----------------------------------------------------------------------===//
 
 std::vector<int64_t> GetRowMajorStrides(span<const int64_t> dims) {
@@ -334,7 +332,7 @@ std::vector<int64_t> GetChannelsLastStrides(span<const int64_t> dims) {
 }  // namespace openxla::runtime::nvgpu
 
 //===----------------------------------------------------------------------===//
-// Register types with IREE VM.
+// Register types with IREE VM
 //===----------------------------------------------------------------------===//
 
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_tensor,

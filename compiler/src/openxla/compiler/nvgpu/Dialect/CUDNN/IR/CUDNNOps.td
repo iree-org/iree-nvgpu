@@ -203,7 +203,8 @@ def CUDNN_GraphOp : CUDNN_Op<"graph", [
     IsolatedFromAbove,
     FunctionOpInterface,
     CallableOpInterface,
-    Symbol
+    Symbol,
+    SingleBlockImplicitTerminator<"openxla::compiler::nvgpu::cudnn::ReturnOp">
   ]> {
   let summary = "operation defining cuDNN graph building function";
 

@@ -11,11 +11,11 @@
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 
-namespace openxla::compiler::nvgpu {
+namespace openxla::compiler::nvgpu::cudnn {
 
 #define GEN_PASS_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
 
-}  // namespace openxla::compiler::nvgpu
+}  // namespace openxla::compiler::nvgpu::cudnn
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSDETAIL_H_

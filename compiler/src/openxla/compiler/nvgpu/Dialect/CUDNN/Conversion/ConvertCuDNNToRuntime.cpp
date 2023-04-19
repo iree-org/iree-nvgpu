@@ -8,7 +8,7 @@
 
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
 
-namespace openxla::compiler::nvgpu {
+namespace openxla::compiler::nvgpu::cudnn {
 
 using namespace mlir;
 
@@ -29,10 +29,9 @@ struct ConvertCuDNNGraphOp : public OpConversionPattern<cudnn::GraphOp> {
 
 }  // namespace
 
-void populateCuDNNToRuntimePatterns(mlir::MLIRContext *context,
-                                    mlir::TypeConverter &typeConverter,
+void populateCuDNNToRuntimePatterns(mlir::TypeConverter &typeConverter,
                                     mlir::RewritePatternSet &patterns) {
-  patterns.insert<ConvertCuDNNGraphOp>(typeConverter, context);
+  patterns.insert<ConvertCuDNNGraphOp>(typeConverter, patterns.getContext());
 }
 
-}  // namespace openxla::compiler::nvgpu
+}  // namespace openxla::compiler::nvgpu::cudnn

@@ -11,7 +11,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
-namespace openxla::compiler::nvgpu {
+namespace openxla::compiler::nvgpu::cudnn {
 
 //===----------------------------------------------------------------------===//
 // Conversion from cuDNN dialect
@@ -20,6 +20,6 @@ namespace openxla::compiler::nvgpu {
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createConvertCuDNNToRuntimePass();
 
-}  // namespace openxla::compiler::nvgpu
+}  // namespace openxla::compiler::nvgpu::cudnn
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_H_

@@ -10,15 +10,14 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-namespace openxla::compiler::nvgpu {
+namespace openxla::compiler::nvgpu::cudnn {
 
 // Appends cuDNN dialect to cudNN runtime patterns to the given pattern list.
 // Conversion patterns lower from cuDNN dialect operations to function calls
 // corresponding to the cuDNN runtime (implemented as a custom VM module).
-void populateCuDNNToRuntimePatterns(mlir::MLIRContext *context,
-                                    mlir::TypeConverter &typeConverter,
+void populateCuDNNToRuntimePatterns(mlir::TypeConverter &typeConverter,
                                     mlir::RewritePatternSet &patterns);
 
-}  // namespace openxla::compiler::nvgpu
+}  // namespace openxla::compiler::nvgpu::cudnn
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_CONVERSION_CONVERT_CUDNN_TO_RUNTIME_H_

@@ -18,7 +18,7 @@
 
 using namespace mlir;
 
-namespace openxla::compiler::nvgpu {
+namespace openxla::compiler::nvgpu::cudnn {
 
 class ConvertCuDNNToRuntime
     : public ::impl::ConvertCuDNNToRuntimeBase<ConvertCuDNNToRuntime> {
@@ -35,7 +35,7 @@ class ConvertCuDNNToRuntime
     conversionTarget.addLegalDialect<func::FuncDialect>();
 
     RewritePatternSet patterns(&getContext());
-    populateCuDNNToRuntimePatterns(context, typeConverter, patterns);
+    populateCuDNNToRuntimePatterns(typeConverter, patterns);
 
     if (failed(applyFullConversion(getOperation(), conversionTarget,
                                    std::move(patterns)))) {
@@ -49,4 +49,4 @@ std::unique_ptr<OperationPass<ModuleOp>> createConvertCuDNNToRuntimePass() {
   return std::make_unique<ConvertCuDNNToRuntime>();
 }
 
-}  // namespace openxla::compiler::nvgpu
+}  // namespace openxla::compiler::nvgpu::cudnn

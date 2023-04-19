@@ -14,7 +14,7 @@ def ConvertCuDNNToRuntime :
   let summary = "Converts cuDNN operations to cuDNN runtime calls";
 
   let constructor = [{
-    ::openxla::compiler::nvgpu::createConvertCuDNNToRuntimePass()
+    ::openxla::compiler::nvgpu::cudnn::createConvertCuDNNToRuntimePass()
   }];
 
   let dependentDialects = [

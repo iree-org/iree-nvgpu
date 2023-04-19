@@ -265,7 +265,6 @@ def CUDNN_ReturnOp : CUDNN_Op<"return", [
     HasParent<"::openxla::compiler::nvgpu::cudnn::GraphOp">
   ]> {
   let summary = "return operation";
-
   let description = [{
     Represents a return operation within a cuDNN graph.
 

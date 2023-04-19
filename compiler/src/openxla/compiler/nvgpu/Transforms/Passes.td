@@ -12,11 +12,11 @@ include "mlir/Pass/PassBase.td"
 def ConvertMHLOToCUDNN : Pass<"openxla-nvgpu-convert-mhlo-to-cudnn", "mlir::ModuleOp"> {
   let summary = "Converts mhlo ops to cudnn ops";
   let constructor = [{
-    ::openxla::compiler::nvgpu::createConvertMHLOToCUDNNPass()
+    ::openxla::compiler::nvgpu::cudnn::createConvertMHLOToCUDNNPass()
   }];
   let dependentDialects = [
     "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
-      ];
+  ];
 }
 
 #endif // OPENXLA_NVGPU_TRANSFORMS_PASSES_TD_

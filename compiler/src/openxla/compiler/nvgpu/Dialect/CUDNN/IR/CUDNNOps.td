@@ -40,11 +40,11 @@ def CUDNN_PointWiseReluOp : CUDNN_Op<"pointwise_relu", [Pure]> {
     let summary = "Pointwise Relu";
 
     let arguments = (ins
-      CUDNN_TensorDescType:$input,
+      CUDNN_TensorType:$input,
       TypeAttr:$compute_type,
       F64Attr:$lower_clip
     );
-    let results = (outs CUDNN_TensorDescType:$res);
+    let results = (outs CUDNN_TensorType:$res);
 
     let assemblyFormat = [{
       `(` $input `)` `type` `=` $compute_type `lower_clip` `=` $lower_clip

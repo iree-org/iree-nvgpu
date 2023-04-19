@@ -12,7 +12,7 @@
 #include "mlir/Pass/PassManager.h"
 
 namespace openxla::compiler::nvgpu::cudnn {
-std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createConvertMHLOToCUDNNPass();
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createConvertHLOToCUDNNPass();
 }  // namespace openxla::compiler::nvgpu::cudnn
 
 #endif // OPENXLA_NVGPU_TRANSFORMS_PASSES_H_

@@ -7,19 +7,27 @@
 #include "iree/compiler/PluginAPI/Client.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
 
+// TODO(ezhulenev): Move passes registration to `Passes.h`.
 namespace detail {
 namespace {
-
 #define GEN_PASS_REGISTRATION
 #include "openxla/compiler/nvgpu/Transforms/Passes.h.inc"
+}  // namespace
 
-} // namespace
-} // namespace detail
+namespace cudnn {
+namespace {
+#define GEN_PASS_REGISTRATION
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
+}  // namespace
+}  // namespace cudnn
+
+}  // namespace detail
 
 namespace {
 
@@ -35,14 +43,17 @@ struct NvgpuOptions {
 };
 
 struct NvgpuSession : public PluginSession<NvgpuSession, NvgpuOptions> {
-  static void registerPasses() { ::detail::registerPasses(); }
+  static void registerPasses() {
+    ::detail::registerPasses();
+    ::detail::cudnn::registerPasses();
+  }
 
   void onRegisterDialects(DialectRegistry &registry) override {
     registry.insert<openxla::compiler::nvgpu::cudnn::CUDNNDialect>();
   }
 };
 
-} // namespace
+}  // namespace
 
 IREE_DEFINE_COMPILER_OPTION_FLAGS(NvgpuOptions);
 

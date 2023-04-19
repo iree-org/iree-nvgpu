@@ -25,6 +25,7 @@ cc_library(
     deps = [
         ":defs",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/Transforms",
         "//compiler/src/openxla/compiler/nvgpu/Transforms",
         "@iree_core//compiler/src/iree/compiler/PluginAPI",
         "@llvm-project//mlir:IR",

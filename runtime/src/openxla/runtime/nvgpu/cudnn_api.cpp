@@ -94,8 +94,22 @@ CuDNNOperationGraph::~CuDNNOperationGraph() {
   graph_.reset();
 }
 
-const cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() const {
-  return *graph_;
+cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() { return *graph_; }
+
+//===----------------------------------------------------------------------===//
+// CuDNNExecutable
+//===----------------------------------------------------------------------===//
+
+CuDNNExecutable::CuDNNExecutable(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNOperationGraph& graph,
+    span<const cudnn_frontend::ExecutionPlan> plans)
+    : syms_(syms),
+      graph_(vm::retain_ref(&graph)),
+      plans_(plans.begin(), plans.end()) {}
+
+CuDNNExecutable::~CuDNNExecutable() {
+  ScopedCuDNNStubs stubs(syms_);
+  plans_.clear();
 }
 
 //===----------------------------------------------------------------------===//
@@ -307,6 +321,65 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 }
 
 //===----------------------------------------------------------------------===//
+// CreateExecutable
+//===----------------------------------------------------------------------===//
+
+// TODO(ezhulenev): We need to be able to configure what engine configs should
+// be supported by the cuDNN executable, e.g. skip all configs that non
+// determenistic results (see CUDNN_NUMERICAL_NOTE_NONDETERMINISTIC note).
+static bool AcceptAllGraphs(cudnnBackendDescriptor_t) { return false; }
+
+iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
+    CuDNNOperationGraph& graph) {
+  ScopedCuDNNStubs stubs(syms);
+
+  // Collect supported engine configs.
+  cudnn_frontend::EngineConfigList configs;
+
+  // TODO(ezhulenev): Heuristics should be configurable. Also it should be
+  // configurable if fallback kernels should be enabled.
+  std::vector<cudnnStatus_t> statuses = cudnn_frontend::get_heuristics_list<1>(
+      {"heuristics_mode_a"}, graph.graph(),
+      AcceptAllGraphs, configs);
+
+  if (configs.empty()) {
+    return iree_make_status(IREE_STATUS_INTERNAL,
+                            "cuDNN operation graph is not supported");
+  }
+
+  // Prepare execution plans for filtered engine configs. Not all configs
+  // actually can be instantated as execution plans, some of them might be
+  // unsupported at run time.
+  std::vector<cudnn_frontend::ExecutionPlan> plans;
+  for (auto config : configs) {
+    cudnn_frontend::ExecutionPlan plan =
+        cudnn_frontend::ExecutionPlanBuilder()
+            .setHandle(handle)
+            .setEngineConfig(config, graph.graph().getTag())
+            .build();
+
+    // Skip engine configs that are not supported by the current cuDNN version.ß
+    if (plan.get_status() == CUDNN_STATUS_NOT_SUPPORTED) {
+      continue;
+    }
+
+    IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, plan.get_status()));
+    plans.push_back(std::move(plan));
+  }
+
+  // If we end up with empty execution plans, it means that current version of
+  // cuDNN can't compiler the given operation graph.
+  if (plans.empty()) {
+    return iree_make_status(
+        IREE_STATUS_INTERNAL,
+        "didn't find any engine config supporting cuDNN operation graph");
+  }
+
+  return vm::ref<CuDNNExecutable>(new CuDNNExecutable(syms, graph, plans));
+}
+
+//===----------------------------------------------------------------------===//
 // Helper functions for setting up cuDNN descriptors
 //===----------------------------------------------------------------------===//
 
@@ -339,3 +412,5 @@ IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_tensor,
                              openxla::runtime::nvgpu::CuDNNTensor);
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_operation_graph,
                              openxla::runtime::nvgpu::CuDNNOperationGraph);
+IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_executable,
+                             openxla::runtime::nvgpu::CuDNNExecutable);

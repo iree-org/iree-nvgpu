@@ -14,6 +14,18 @@ extern "C" {
 // cuDNN API required for compiling cudnn_frontend.
 //===----------------------------------------------------------------------===//
 
+cudnnStatus_t CUDNNWINAPI cudnnBackendGetAttribute(
+    cudnnBackendDescriptor_t descriptor,
+    cudnnBackendAttributeName_t attributeName,
+    cudnnBackendAttributeType_t attributeType, int64_t requestedElementCount,
+    int64_t* elementCount, void* arrayOfElements) {
+  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  IREE_ASSERT(syms);
+  return syms->cudnnBackendGetAttribute(descriptor, attributeName,
+                                        attributeType, requestedElementCount,
+                                        elementCount, arrayOfElements);
+}
+
 cudnnStatus_t CUDNNWINAPI
 cudnnBackendSetAttribute(cudnnBackendDescriptor_t descriptor,
                          cudnnBackendAttributeName_t attributeName,

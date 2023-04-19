@@ -6,8 +6,12 @@
 
 #include "openxla/runtime/nvgpu/cudnn_module.h"
 
+#include <iree/base/internal/dynamic_library.h>
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
+#include <iree/hal/drivers/cuda/api.h>
+#include <iree/hal/drivers/cuda/dynamic_symbols.h>
+#include <iree/hal/drivers/cuda/status_util.h>
 #include <iree/vm/list.h>
 #include <iree/vm/ref_cc.h>
 #include <openxla/runtime/nvgpu/cudnn_api.h>
@@ -34,7 +38,8 @@ using namespace iree;
 
 class CuDNNModuleState {
  public:
-  CuDNNModuleState(openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
+  CuDNNModuleState(iree_hal_cuda_dynamic_symbols_t cuda_syms,
+                   openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
   ~CuDNNModuleState();
 
   enum class TensorFormat { kRowMajor, kChannelsLast };
@@ -64,6 +69,10 @@ class CuDNNModuleState {
   StatusOr<vm::ref<CuDNNOperationGraph>> CreateGraph(
       const vm::ref<CuDNNTensor> tensor);
 
+  // Creates a cuDNN executable from the given operation graph.
+  StatusOr<vm::ref<CuDNNExecutable>> Executable(
+      const vm::ref<CuDNNOperationGraph> graph);
+
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
 
@@ -74,6 +83,7 @@ class CuDNNModuleState {
   CuDNNModuleState(const CuDNNModuleState&) = delete;
   CuDNNModuleState& operator=(const CuDNNModuleState&) = delete;
 
+  iree_hal_cuda_dynamic_symbols_t cuda_syms_;
   openxla_cudnn_dynamic_symbols_t syms_;
 
   // IREE custom module state must be thread-compatible, and access to the same
@@ -82,9 +92,10 @@ class CuDNNModuleState {
   cudnnHandle_t handle_;
 };
 
-CuDNNModuleState::CuDNNModuleState(openxla_cudnn_dynamic_symbols_t syms,
+CuDNNModuleState::CuDNNModuleState(iree_hal_cuda_dynamic_symbols_t cuda_syms,
+                                   openxla_cudnn_dynamic_symbols_t syms,
                                    cudnnHandle_t handle)
-    : syms_(syms), handle_(handle) {}
+    : cuda_syms_(cuda_syms), syms_(syms), handle_(handle) {}
 
 CuDNNModuleState::~CuDNNModuleState() {
   CUDNN_STATUS_CHECK_OK(&syms_, cudnnDestroy(handle_));
@@ -151,6 +162,11 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::CreateGraph(
   return CreateOperationGraph(&syms_, handle_, {tensor.get()});
 }
 
+StatusOr<vm::ref<CuDNNExecutable>> CuDNNModuleState::Executable(
+    const vm::ref<CuDNNOperationGraph> graph) {
+  return CreateExecutable(&syms_, handle_, *graph);
+}
+
 //===----------------------------------------------------------------------===//
 // Functions dispatch table for CuDNNModuleState.
 //===----------------------------------------------------------------------===//
@@ -171,6 +187,9 @@ static const vm::NativeFunction<CuDNNModuleState> kCuDNNModuleFunctions[] = {
 
     // cuDNN graph construction
     MakeNativeFunction("graph.create", &CuDNNModuleState::CreateGraph),
+
+    // cuDNN executable construction
+    MakeNativeFunction("executable.create", &CuDNNModuleState::Executable),
 
     // Debugging operations
     MakeNativeFunction("debug.tensor", &CuDNNModuleState::PrintTensorDebug),
@@ -212,11 +231,15 @@ CuDNNModule::CuDNNModule(iree_vm_instance_t* instance,
 
 StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
     iree_allocator_t host_allocator) {
+  // Load CUDA and resolbe API symbols.
+  iree_hal_cuda_dynamic_symbols_t cuda_syms;
+  IREE_RETURN_IF_ERROR(
+      iree_hal_cuda_dynamic_symbols_initialize(host_allocator, &cuda_syms));
+
   // Load cuDNN library and resolve API symbols.
   openxla_cudnn_dynamic_symbols_t syms;
-  iree_status_t status =
-      openxla_cudnn_dynamic_symbols_initialize(host_allocator, &syms);
-  if (!iree_status_is_ok(status)) return status;
+  IREE_RETURN_IF_ERROR(
+      openxla_cudnn_dynamic_symbols_initialize(host_allocator, &syms));
 
   // Create a cuDNN handle for the new state object.
   cudnnHandle_t handle;
@@ -225,7 +248,7 @@ StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
   // immediately after device is created, however it might not always be true?
   CUDNN_RETURN_IF_ERROR(&syms, cudnnCreate(&handle), "cudnnCreate");
 
-  return std::make_unique<CuDNNModuleState>(syms, handle);
+  return std::make_unique<CuDNNModuleState>(cuda_syms, syms, handle);
 }
 
 }  // namespace openxla::runtime::nvgpu
@@ -268,8 +291,9 @@ extern "C" iree_status_t iree_custom_module_cudnn_register_types(
     iree_vm_instance_t* instance) {
   IREE_RETURN_IF_ERROR(RegisterType<CuDNNTensor>(instance, "cudnn.tensor",
                                                  &cudnn_tensor_registration));
-
   IREE_RETURN_IF_ERROR(RegisterType<CuDNNOperationGraph>(
       instance, "cudnn.operation_graph", &cudnn_operation_graph_registration));
+  IREE_RETURN_IF_ERROR(RegisterType<CuDNNExecutable>(
+      instance, "cudnn.executable", &cudnn_executable_registration));
   return iree_ok_status();
 }

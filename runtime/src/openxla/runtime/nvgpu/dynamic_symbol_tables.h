@@ -17,6 +17,9 @@ CUDNN_PFN_DECL_STR_RETURN(cudnnGetErrorString)
 //===----------------------------------------------------------------------===//
 
 CUDNN_PFN_DECL(cudnnBackendFinalize, cudnnBackendDescriptor_t)
+CUDNN_PFN_DECL(cudnnBackendGetAttribute, cudnnBackendDescriptor_t,
+               cudnnBackendAttributeName_t, cudnnBackendAttributeType_t,
+               int64_t, int64_t *, void *);
 CUDNN_PFN_DECL(cudnnBackendSetAttribute, cudnnBackendDescriptor_t,
                cudnnBackendAttributeName_t, cudnnBackendAttributeType_t,
                int64_t, const void *)

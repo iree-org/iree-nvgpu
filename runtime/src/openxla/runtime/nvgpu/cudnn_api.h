@@ -37,6 +37,8 @@ class CuDNNTensor : public iree::vm::RefObject<CuDNNTensor> {
 
   virtual const cudnn_frontend::Tensor& tensor() const = 0;
 
+  const cudnn_frontend::Tensor* operator->() { return &tensor(); }
+
   Kind kind() const { return kind_; }
 
  private:
@@ -128,10 +130,27 @@ iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseRelu(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
     double lower_clip, double upper_clip, int64_t uid, int64_t alignment);
 
+// Creates a forward convolution operation.
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateConvolution(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
+    CuDNNTensor& filter, int64_t uid, int64_t alignment);
+
 // Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
     iree::span<CuDNNTensor* const> results);
+
+//===----------------------------------------------------------------------===//
+// Helper functions for setting up cuDNN descriptors.
+//===----------------------------------------------------------------------===//
+
+// Get strides for row major storage format (in cuDNN NCHW, NCDHW are considered
+// to be the row-major formats for 4-D and 5-D tensors).
+std::vector<int64_t> GetRowMajorStrides(iree::span<const int64_t> dims);
+
+// Compute strides for channels last storage format (NHWC, NDHWC). Can be
+// computed only for 4-D or 5-D tensors.
+std::vector<int64_t> GetChannelsLastStrides(iree::span<const int64_t> dims);
 
 }  // namespace openxla::runtime::nvgpu
 

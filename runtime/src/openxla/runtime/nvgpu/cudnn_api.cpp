@@ -6,6 +6,7 @@
 
 #include "openxla/runtime/nvgpu/cudnn_api.h"
 
+#include <iree/base/assert.h>
 #include <iree/base/internal/span.h>
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
@@ -27,7 +28,7 @@ using cudnn_frontend::TensorBuilder;
 // clang-format on
 
 //===----------------------------------------------------------------------===//
-// CuDNNArgTensor.
+// CuDNNArgTensor
 //===----------------------------------------------------------------------===//
 
 CuDNNArgTensor::CuDNNArgTensor(openxla_cudnn_dynamic_symbols_t* syms,
@@ -44,7 +45,7 @@ const cudnn_frontend::Tensor& CuDNNArgTensor::tensor() const {
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOpResultTensor.
+// CuDNNOpResultTensor
 //===----------------------------------------------------------------------===//
 
 CuDNNOpResultTensor::CuDNNOpResultTensor(openxla_cudnn_dynamic_symbols_t* syms,
@@ -81,7 +82,7 @@ const cudnn_frontend::Tensor& CuDNNOpResultTensor::tensor() const {
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOperationGraph.
+// CuDNNOperationGraph
 //===----------------------------------------------------------------------===//
 
 CuDNNOperationGraph::CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
@@ -98,11 +99,11 @@ const cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() const {
 }
 
 //===----------------------------------------------------------------------===//
-// Wrappers around cuDNN APIs export from a cuDNN module to the user.
+// Wrappers around cuDNN APIs export from a cuDNN module to the user
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// CreateArgument.
+// CreateArgument
 //===----------------------------------------------------------------------===//
 
 StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
@@ -122,7 +123,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
 }
 
 //===----------------------------------------------------------------------===//
-// CreatePointwiseRelu.
+// CreatePointwiseRelu
 //===----------------------------------------------------------------------===//
 
 StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
@@ -160,7 +161,109 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
 }
 
 //===----------------------------------------------------------------------===//
-// CreateOperationGraph.
+// CreateConvolution
+//===----------------------------------------------------------------------===//
+
+static int64_t GetFwdConvDilatedFilterDim(int64_t filter_dim,
+                                          int64_t dilation) {
+  return ((filter_dim - 1) * dilation) + 1;
+}
+
+static int64_t GetFwdConvPaddedImageDim(int64_t tensor_dim, int64_t padding) {
+  return tensor_dim + (2 * padding);
+}
+
+static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t padding,
+                                   int64_t filter_dim, int64_t stride,
+                                   int64_t dilation) {
+  int64_t padded = GetFwdConvPaddedImageDim(tensor_dim, padding);
+  int64_t dilated = GetFwdConvDilatedFilterDim(filter_dim, dilation);
+  return ((padded - dilated) / stride) + 1;
+}
+
+StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
+    CuDNNTensor& filter, int64_t uid, int64_t alignment) {
+  ScopedCuDNNStubs stubs(syms);
+
+  span<const int64_t> input_dims(input->getDim(), input->getDimCount());
+  span<const int64_t> filter_dims(filter->getDim(), filter->getDimCount());
+
+  // TODO(ezhulenev): Add support for 3-D convolutions.
+  static constexpr int64_t kSpatialDims = 2;
+
+  if (input_dims.size() != 4) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "3d convolution is not supported");
+  }
+
+  if (input_dims.size() != filter_dims.size()) {
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "convolution input and filter must have the same rank");
+  }
+
+  // TODO(ezhulenev): Add support for padded, dilated and strided convolutions.
+  std::array<int64_t, kSpatialDims> paddings = {0, 0};
+  std::array<int64_t, kSpatialDims> strides = {1, 1};
+  std::array<int64_t, kSpatialDims> dilations = {1, 1};
+
+  // Compute convolution output dimensions.
+  std::vector<int64_t> output_dims = {input_dims[0], input_dims[1]};  // [N, C]
+  for (int d = 0; d < kSpatialDims; ++d) {
+    output_dims.push_back(GetFwdConvOutputDim(input_dims[d + 2], paddings[d],
+                                              filter_dims[d + 2], strides[d],
+                                              dilations[d]));
+  }
+
+  // Compute strides for output tensor based on input format.
+  bool is_nhwc = input->getStride()[1] == 1;
+  std::vector<int64_t> output_strides =
+      is_nhwc ? GetChannelsLastStrides(output_dims)
+              : GetRowMajorStrides(output_dims);
+
+  // Prepare tensor descriptor for convolution output.
+  cudnn_frontend::Tensor tensor =
+      cudnn_frontend::TensorBuilder()
+          .cloneFrom(input.tensor(), uid)
+          .setAlignment(alignment)
+          .setDim(output_dims.size(), output_dims.data())
+          .setStride(output_strides.size(), output_strides.data())
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
+
+  // Prepare a forward convolution descriptor.
+  cudnn_frontend::ConvDesc convolution =
+      cudnn_frontend::ConvDescBuilder()
+          .setComputeType(CUDNN_DATA_FLOAT)
+          .setMathMode(CUDNN_CONVOLUTION)
+          .setSpatialDimCount(kSpatialDims)
+          .setSpatialStride(kSpatialDims, strides.data())
+          .setPrePadding(kSpatialDims, paddings.data())
+          .setPostPadding(kSpatialDims, paddings.data())
+          .setDilation(kSpatialDims, dilations.data())
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, convolution.get_status()));
+
+  // Create operation.
+  cudnn_frontend::Operation operation =
+      cudnn_frontend::OperationBuilder(
+          CUDNN_BACKEND_OPERATION_CONVOLUTION_FORWARD_DESCRIPTOR)
+          .setxDesc(input.tensor())
+          .setwDesc(filter.tensor())
+          .setyDesc(tensor)
+          .setcDesc(convolution)
+          .setAlpha(1.0)
+          .setBeta(0.0)
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
+
+  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+      syms, {&input}, std::move(operation), std::move(tensor)));
+}
+
+//===----------------------------------------------------------------------===//
+// CreateOperationGraph
 //===----------------------------------------------------------------------===//
 
 template <typename To>
@@ -203,10 +306,33 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
       new CuDNNOperationGraph(syms, std::move(graph)));
 }
 
+//===----------------------------------------------------------------------===//
+// Helper functions for setting up cuDNN descriptors
+//===----------------------------------------------------------------------===//
+
+std::vector<int64_t> GetRowMajorStrides(span<const int64_t> dims) {
+  std::vector<int64_t> strides(dims.size(), 1);
+  for (int64_t d = dims.size() - 2; d >= 0; --d)
+    strides[d] = dims[d] * strides[d + 1];
+  return strides;
+}
+
+std::vector<int64_t> GetChannelsLastStrides(span<const int64_t> dims) {
+  IREE_ASSERT(dims.size() == 4 || dims.size() == 5);
+  std::vector<int64_t> strides(dims.size(), 1);
+  strides[1] = 1;
+  strides[dims.size() - 1] = strides[1] * dims[1];
+  for (int64_t d = dims.size() - 2; d >= 2; --d) {
+    strides[d] = strides[d + 1] * dims[d + 1];
+  }
+  strides[0] = strides[2] * dims[2];
+  return strides;
+}
+
 }  // namespace openxla::runtime::nvgpu
 
 //===----------------------------------------------------------------------===//
-// Register types with IREE VM.
+// Register types with IREE VM
 //===----------------------------------------------------------------------===//
 
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_tensor,

@@ -25,7 +25,7 @@ namespace openxla::runtime::nvgpu {
 // wrappers for all cuDNN Graph API backend descriptors.
 
 //===----------------------------------------------------------------------===//
-// cuDNN tensor representing an abstract shaped and typed block of memory.
+// cuDNN tensor representing an abstract shaped and typed block of memory
 //===----------------------------------------------------------------------===//
 
 class CuDNNTensor : public iree::vm::RefObject<CuDNNTensor> {
@@ -46,7 +46,7 @@ class CuDNNTensor : public iree::vm::RefObject<CuDNNTensor> {
 };
 
 //===----------------------------------------------------------------------===//
-// Tensor corresponding to the cuDNN graph arguments.
+// Tensor corresponding to the cuDNN graph arguments
 //===----------------------------------------------------------------------===//
 
 class CuDNNArgTensor final : public CuDNNTensor {
@@ -67,7 +67,7 @@ class CuDNNArgTensor final : public CuDNNTensor {
 };
 
 //===----------------------------------------------------------------------===//
-// Tensor corresponding to the cuDNN operation result.
+// Tensor corresponding to the cuDNN operation result
 //===----------------------------------------------------------------------===//
 
 class CuDNNOpResultTensor final : public CuDNNTensor {
@@ -99,7 +99,7 @@ class CuDNNOpResultTensor final : public CuDNNTensor {
 };
 
 //===----------------------------------------------------------------------===//
-// CuDNN operation graph.
+// CuDNN operation graph
 //===----------------------------------------------------------------------===//
 
 class CuDNNOperationGraph : public iree::vm::RefObject<CuDNNOperationGraph> {
@@ -116,7 +116,7 @@ class CuDNNOperationGraph : public iree::vm::RefObject<CuDNNOperationGraph> {
 };
 
 //===----------------------------------------------------------------------===//
-// CuDNN executable.
+// CuDNN executable
 //===----------------------------------------------------------------------===//
 
 // CuDNN executable encapsulates all the details of configuring cuDNN engines
@@ -137,7 +137,7 @@ class CuDNNExecutable : public iree::vm::RefObject<CuDNNExecutable> {
 };
 
 //===----------------------------------------------------------------------===//
-// Wrappers around cuDNN APIs export from a cuDNN module to the user.
+// Wrappers around cuDNN APIs export from a cuDNN module to the user
 //===----------------------------------------------------------------------===//
 
 // Creates a tensor placeholder for cuDNN graph argument.
@@ -167,7 +167,7 @@ iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
     CuDNNOperationGraph& graph);
 
 //===----------------------------------------------------------------------===//
-// Helper functions for setting up cuDNN descriptors.
+// Helper functions for setting up cuDNN descriptors
 //===----------------------------------------------------------------------===//
 
 // Get strides for row major storage format (in cuDNN NCHW, NCDHW are considered
@@ -181,7 +181,7 @@ std::vector<int64_t> GetChannelsLastStrides(iree::span<const int64_t> dims);
 }  // namespace openxla::runtime::nvgpu
 
 //===----------------------------------------------------------------------===//
-// Register types with IREE VM.
+// Register types with IREE VM
 //===----------------------------------------------------------------------===//
 
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_tensor,

@@ -97,7 +97,7 @@ CuDNNOperationGraph::~CuDNNOperationGraph() {
 cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() { return *graph_; }
 
 //===----------------------------------------------------------------------===//
-// CuDNNExecutable.
+// CuDNNExecutable
 //===----------------------------------------------------------------------===//
 
 CuDNNExecutable::CuDNNExecutable(
@@ -321,7 +321,7 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 }
 
 //===----------------------------------------------------------------------===//
-// CreateExecutable.
+// CreateExecutable
 //===----------------------------------------------------------------------===//
 
 // TODO(ezhulenev): We need to be able to configure what engine configs should

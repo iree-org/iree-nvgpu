@@ -2,6 +2,12 @@
 
 module @example {
 
+   util.global private @input : tensor<8x32x4x4xf32>
+     = dense<1.0> : tensor<8x32x4x4xf32>
+
+   util.global private @filter : tensor<32x32x1x1xf32>
+     = dense<1.0> : tensor<32x32x1x1xf32>
+
   //===--------------------------------------------------------------------===//
   // Import functions from the cuDNN module.
   //===--------------------------------------------------------------------===//
@@ -25,10 +31,18 @@ module @example {
   func.func private @cudnn.graph.create(
     %tensor: !cudnn.tensor
   ) -> !cudnn.operation_graph
-  
+
   func.func private @cudnn.executable.create(
     %tensor: !cudnn.operation_graph
   ) -> !cudnn.executable
+
+  func.func private @cudnn.execute(
+    %executable: !cudnn.executable, %input: tensor<8x32x4x4xf32>,
+    %filter: tensor<32x32x1x1xf32>
+  ) -> tensor<8x32x4x4xf32> attributes {
+    iree.abi.model = "coarse-fences",
+    nosideeffects
+  }
 
   func.func private @cudnn.debug.tensor(
     %tensor: !cudnn.tensor
@@ -42,7 +56,7 @@ module @example {
   // Build and execute cuDNN graph.
   //===--------------------------------------------------------------------===//
 
-  func.func @main() {
+  func.func @main() -> tensor<8x32x4x4xf32> {
     %rank = arith.constant 4 : index
 
     %c0 = arith.constant 0 : index
@@ -65,7 +79,7 @@ module @example {
     // Tensor UIDs
     %uid0 = arith.constant 0 : i64 // input
     %uid1 = arith.constant 1 : i64 // filter
-    %uid2 = arith.constant 1 : i64 // output
+    %uid2 = arith.constant 2 : i64 // output
 
     // Input: [8, 32, 4, 4]
     %input_dims = util.list.create %rank : !util.list<i64>
@@ -75,7 +89,7 @@ module @example {
     util.list.set %input_dims[%c2], %d4 : !util.list<i64>
     util.list.set %input_dims[%c3], %d4 : !util.list<i64>
 
-    // Filter: [32, 32, 2, 2]
+    // Filter: [32, 32, 1, 1]
     %filter_dims = util.list.create %rank : !util.list<i64>
     util.list.resize %filter_dims, %rank : !util.list<i64>
     util.list.set %filter_dims[%c0], %d32 : !util.list<i64>
@@ -109,7 +123,15 @@ module @example {
     %executable = call @cudnn.executable.create(%graph)
            : (!cudnn.operation_graph) -> !cudnn.executable
 
-    return
+    // Run executable with tensor inputs.
+    %input_tensor = util.global.load @input : tensor<8x32x4x4xf32>
+    %filter_tensor = util.global.load @filter : tensor<32x32x1x1xf32>
+    %output_tensor =
+      call @cudnn.execute(%executable, %input_tensor, %filter_tensor)
+        : (!cudnn.executable, tensor<8x32x4x4xf32>, tensor<32x32x1x1xf32>)
+        -> tensor<8x32x4x4xf32>
+
+    return %output_tensor : tensor<8x32x4x4xf32>
   }
 
 }

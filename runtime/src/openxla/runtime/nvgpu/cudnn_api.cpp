@@ -10,9 +10,12 @@
 #include <iree/base/internal/span.h>
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
+#include <iree/hal/buffer.h>
+#include <iree/hal/drivers/cuda/cuda_buffer.h>
 #include <iree/vm/ref_cc.h>
 #include <openxla/runtime/nvgpu/status_util.h>
 
+#include <iostream>
 #include <type_traits>
 
 #include "openxla/runtime/nvgpu/cudnn_stub.h"
@@ -26,6 +29,12 @@ using cudnn_frontend::TensorBuilder;
 // clang-format off
 #include "openxla/runtime/nvgpu/cudnn_stub.h.inc"
 // clang-format on
+
+static std::vector<CuDNNTensor*> AsPtrs(span<const vm::ref<CuDNNTensor>> refs) {
+  std::vector<CuDNNTensor*> ptrs;
+  for (auto& ref : refs) ptrs.push_back(ref.get());
+  return ptrs;
+}
 
 //===----------------------------------------------------------------------===//
 // CuDNNArgTensor
@@ -56,9 +65,7 @@ CuDNNOpResultTensor::CuDNNOpResultTensor(openxla_cudnn_dynamic_symbols_t* syms,
       syms_(syms),
       operation_(std::move(operation)),
       tensor_(std::move(tensor)) {
-  for (CuDNNTensor* input : inputs) {
-    inputs_.push_back(vm::retain_ref(input));
-  }
+  for (CuDNNTensor* input : inputs) inputs_.push_back(vm::retain_ref(input));
 }
 
 CuDNNOpResultTensor::~CuDNNOpResultTensor() {
@@ -68,9 +75,7 @@ CuDNNOpResultTensor::~CuDNNOpResultTensor() {
 }
 
 std::vector<CuDNNTensor*> CuDNNOpResultTensor::inputs() const {
-  std::vector<CuDNNTensor*> ptrs;
-  for (auto& input : inputs_) ptrs.push_back(input.get());
-  return ptrs;
+  return AsPtrs(inputs_);
 }
 
 const cudnn_frontend::Operation* CuDNNOpResultTensor::operation() const {
@@ -86,8 +91,19 @@ const cudnn_frontend::Tensor& CuDNNOpResultTensor::tensor() const {
 //===----------------------------------------------------------------------===//
 
 CuDNNOperationGraph::CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
-                                         cudnn_frontend::OperationGraph graph)
-    : syms_(syms), graph_(std::move(graph)) {}
+                                         cudnn_frontend::OperationGraph graph,
+                                         span<CuDNNTensor* const> args,
+                                         span<CuDNNTensor* const> rets)
+    : syms_(syms), graph_(std::move(graph)) {
+  for (auto* arg : args) {
+    args_.push_back(vm::retain_ref(arg));
+    uids_.push_back(arg->tensor().getId());
+  }
+  for (auto* ret : rets) {
+    rets_.push_back(vm::retain_ref(ret));
+    uids_.push_back(ret->tensor().getId());
+  }
+}
 
 CuDNNOperationGraph::~CuDNNOperationGraph() {
   ScopedCuDNNStubs stubs(syms_);
@@ -95,6 +111,16 @@ CuDNNOperationGraph::~CuDNNOperationGraph() {
 }
 
 cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() { return *graph_; }
+
+std::vector<CuDNNTensor*> CuDNNOperationGraph::args() const {
+  return AsPtrs(args_);
+}
+
+std::vector<CuDNNTensor*> CuDNNOperationGraph::rets() const {
+  return AsPtrs(rets_);
+}
+
+iree::span<const int64_t> CuDNNOperationGraph::uids() const { return uids_; }
 
 //===----------------------------------------------------------------------===//
 // CuDNNExecutable
@@ -110,6 +136,61 @@ CuDNNExecutable::CuDNNExecutable(
 CuDNNExecutable::~CuDNNExecutable() {
   ScopedCuDNNStubs stubs(syms_);
   plans_.clear();
+}
+
+const CuDNNOperationGraph& CuDNNExecutable::graph() const { return *graph_; }
+
+// Converts IREE HAL buffers to CUDA device pointers.
+static std::vector<CUdeviceptr> GetDevicePointers(
+    span<iree_hal_buffer_t* const> buffers) {
+  std::vector<CUdeviceptr> ptrs(buffers.size());
+  for (size_t i = 0; i < buffers.size(); ++i) {
+    iree_hal_buffer_t* allocated = iree_hal_buffer_allocated_buffer(buffers[i]);
+    IREE_ASSERT_EQ(iree_hal_cuda_buffer_type(allocated),
+                   IREE_HAL_CUDA_BUFFER_TYPE_DEVICE);
+
+    ptrs[i] = iree_hal_cuda_buffer_device_pointer(allocated) +
+              iree_hal_buffer_byte_offset(buffers[i]);
+  }
+  return ptrs;
+}
+
+Status CuDNNExecutable::Execute(cudnnHandle_t handle,
+                                span<iree_hal_buffer_t* const> buffers) {
+  ScopedCuDNNStubs stubs(syms_);
+
+  // Check that we have a buffer for every argument and result tensor.
+  if (buffers.size() != (graph_->args().size() + graph_->rets().size())) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "number of buffer arguments doesn't match the "
+                            "number of graph arguments and results");
+  }
+
+  auto ptrs = GetDevicePointers(buffers);
+  static_assert(sizeof(CUdeviceptr) == sizeof(void*));
+
+  auto uids = graph_->uids();
+  IREE_ASSERT_EQ(ptrs.size(), uids.size());
+
+  // TODO(ezhulenev): Support plans with workspace.
+  IREE_ASSERT_EQ(plans_[0].getWorkspaceSize(), 0);
+  void* workspace = nullptr;
+
+  // Pack pointers to device buffers with unique tensor ids.
+  cudnn_frontend::VariantPack pack =
+      cudnn_frontend::VariantPackBuilder()
+          .setWorkspacePointer(workspace)
+          .setDataPointers(ptrs.size(), reinterpret_cast<void**>(ptrs.data()))
+          .setUids(uids.size(), uids.data())
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms_, pack.get_status()));
+
+  CUDNN_RETURN_IF_ERROR(syms_,
+                        cudnnBackendExecute(handle, plans_[0].get_raw_desc(),
+                                            pack.get_raw_desc()),
+                        "cudnnBackendExecute()");
+
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -273,7 +354,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
   return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
-      syms, {&input}, std::move(operation), std::move(tensor)));
+      syms, {&input, &filter}, std::move(operation), std::move(tensor)));
 }
 
 //===----------------------------------------------------------------------===//
@@ -287,19 +368,28 @@ static To* DynCast(CuDNNTensor* tensor) {
 
 StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    span<CuDNNTensor* const> results) {
+    span<CuDNNTensor* const> rets) {
   ScopedCuDNNStubs stubs(syms);
 
-  // Collect cuDNN operations producing tensor results.
-  std::vector<CuDNNTensor*> worklist(results.begin(), results.end());
+  // Tensors that should be passed as inputs when executing cuDNN graph.
+  std::vector<CuDNNTensor*> args;
+
+  // cuDNN operations defining the operation graph.
   std::vector<const cudnn_frontend::Operation*> ops;
 
   // TODO(ezhulenev): Take care of duplicate operations when traversing a tensor
   // use-def chains (with an end-to-end test once we'll support them).
 
+  // Traverse cuDNN tensor use-def chains starting from returned tensors.
+  std::vector<CuDNNTensor*> worklist(rets.begin(), rets.end());
   while (!worklist.empty()) {
     CuDNNTensor* tensor = worklist.back();
     worklist.pop_back();
+
+    // Operation graph argument that must be passed as input.
+    if (auto* arg = DynCast<CuDNNArgTensor>(tensor)) {
+      args.push_back(arg);
+    }
 
     // Add cudnn_frontend operation and follow inputs.
     if (auto* op_result = DynCast<CuDNNOpResultTensor>(tensor)) {
@@ -317,7 +407,7 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, graph.get_status()));
 
   return vm::ref<CuDNNOperationGraph>(
-      new CuDNNOperationGraph(syms, std::move(graph)));
+      new CuDNNOperationGraph(syms, std::move(graph), args, rets));
 }
 
 //===----------------------------------------------------------------------===//
@@ -340,8 +430,7 @@ iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
   // TODO(ezhulenev): Heuristics should be configurable. Also it should be
   // configurable if fallback kernels should be enabled.
   std::vector<cudnnStatus_t> statuses = cudnn_frontend::get_heuristics_list<1>(
-      {"heuristics_mode_a"}, graph.graph(),
-      AcceptAllGraphs, configs);
+      {"heuristics_mode_a"}, graph.graph(), AcceptAllGraphs, configs);
 
   if (configs.empty()) {
     return iree_make_status(IREE_STATUS_INTERNAL,

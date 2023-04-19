@@ -8,6 +8,7 @@
 
 #include "iree/modules/hal/types.h"
 #include "iree/runtime/api.h"
+#include "iree/tooling/vm_util.h"
 #include "openxla/runtime/nvgpu/cudnn_module.h"
 
 // TODO: This is a temporary work around missing custom modules integration into
@@ -88,6 +89,10 @@ int main(int argc, char** argv) {
   // Synchronously invoke the requested function.
   IREE_CHECK_OK(
       iree_runtime_session_call_by_name(session, entry_point, inputs, outputs));
+
+  // Print outputs to stdout.
+  IREE_CHECK_OK(iree_tooling_variant_list_fprint(
+      iree_make_cstring_view("outputs"), outputs, 100, stdout));
 
   fprintf(stdout, "INVOKE END %.*s\n", (int)entry_point.size, entry_point.data);
   fflush(stdout);

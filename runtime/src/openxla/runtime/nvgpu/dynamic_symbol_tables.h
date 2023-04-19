@@ -16,10 +16,12 @@ CUDNN_PFN_DECL_STR_RETURN(cudnnGetErrorString)
 // Functions required for compiling cudnn_frontend (see cudnn_tensor.{h,cpp}).
 //===----------------------------------------------------------------------===//
 
+CUDNN_PFN_DECL(cudnnBackendExecute, cudnnHandle_t, cudnnBackendDescriptor_t,
+               cudnnBackendDescriptor_t)
 CUDNN_PFN_DECL(cudnnBackendFinalize, cudnnBackendDescriptor_t)
 CUDNN_PFN_DECL(cudnnBackendGetAttribute, cudnnBackendDescriptor_t,
                cudnnBackendAttributeName_t, cudnnBackendAttributeType_t,
-               int64_t, int64_t *, void *);
+               int64_t, int64_t *, void *)
 CUDNN_PFN_DECL(cudnnBackendSetAttribute, cudnnBackendDescriptor_t,
                cudnnBackendAttributeName_t, cudnnBackendAttributeType_t,
                int64_t, const void *)

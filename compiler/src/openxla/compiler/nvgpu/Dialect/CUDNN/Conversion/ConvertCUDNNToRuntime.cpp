@@ -37,14 +37,16 @@ namespace {
 class CudnnAPI {
  public:
   // Imports `@cudnn.tensor.create` into the module.
-  func::FuncOp getTensorCreateFunction(ModuleOp module, int64_t rank);
+  func::FuncOp getTensorCreateFunction(PatternRewriter &rewriter,
+                                       ModuleOp module, int64_t rank);
 
   // Imports `@cudnn.operation_graph.create` into the module.
-  func::FuncOp getOperationGraphCreateFunction(ModuleOp module);
+  func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
+                                               ModuleOp module);
 
  private:
-  func::FuncOp addDecl(ModuleOp module, StringAttr name,
-                       FunctionType function_type);
+  func::FuncOp addDecl(PatternRewriter &rewriter, ModuleOp module,
+                       StringAttr name, FunctionType function_type);
 
   SymbolTable &symTable(ModuleOp module);
 
@@ -55,36 +57,39 @@ SymbolTable &CudnnAPI::symTable(ModuleOp module) {
   return symTable_.getSymbolTable(module);
 }
 
-func::FuncOp CudnnAPI::addDecl(ModuleOp module, StringAttr name,
-                               FunctionType function_type) {
+func::FuncOp CudnnAPI::addDecl(PatternRewriter &rewriter, ModuleOp module,
+                               StringAttr name, FunctionType function_type) {
   if (auto fn = symTable_.lookupNearestSymbolFrom<func::FuncOp>(module, name))
     return fn;
 
-  auto b = ImplicitLocOpBuilder::atBlockEnd(
-      UnknownLoc::get(module->getContext()), module.getBody());
+  ImplicitLocOpBuilder b(UnknownLoc::get(module->getContext()), rewriter);
+  b.setInsertionPointToEnd(module.getBody());
+
   auto fn = b.create<func::FuncOp>(name, function_type);
   fn.setPrivate();
   symTable(module).insert(fn);
   return fn;
 }
 
-func::FuncOp CudnnAPI::getTensorCreateFunction(ModuleOp module, int64_t rank) {
+func::FuncOp CudnnAPI::getTensorCreateFunction(PatternRewriter &rewriter,
+                                               ModuleOp module, int64_t rank) {
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args(/*dtype*/ 1 + rank, IntegerType::get(ctx, 64));
   SmallVector<Type> rets = {cudnn::TensorType::get(ctx)};
   auto function_type = FunctionType::get(ctx, args, rets);
   auto function_name =
       StringAttr::get(ctx, llvm::formatv("cudnn.tensor.create.{0}d", rank));
-  return addDecl(module, function_name, function_type);
+  return addDecl(rewriter, module, function_name, function_type);
 }
 
-func::FuncOp CudnnAPI::getOperationGraphCreateFunction(ModuleOp module) {
+func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
+    PatternRewriter &rewriter, ModuleOp module) {
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args = {cudnn::TensorType::get(ctx)};
   SmallVector<Type> rets = {cudnn::OperationGraphType::get(ctx)};
   auto function_type = FunctionType::get(ctx, args, rets);
   auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
-  return addDecl(module, function_name, function_type);
+  return addDecl(rewriter, module, function_name, function_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -145,7 +150,8 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
         args.push_back(b.create<arith::ConstantIntOp>(dim, 64));
       }
 
-      auto createTensor = api->getTensorCreateFunction(module, shape.size());
+      auto createTensor =
+          api->getTensorCreateFunction(rewriter, module, shape.size());
       auto tensor = b.create<func::CallOp>(createTensor.getSymName(),
                                            cudnn::TensorType::get(ctx), args);
       mappedArgs.push_back(tensor.getResult(0));
@@ -177,7 +183,7 @@ struct ConvertCudnnReturnOp : public CudnnOpConversionPattern<cudnn::ReturnOp> {
     ModuleOp module = op->getParentOfType<ModuleOp>();
 
     // Create an operation graph from the returned tensor results.
-    auto createOpGraph = api->getOperationGraphCreateFunction(module);
+    auto createOpGraph = api->getOperationGraphCreateFunction(rewriter, module);
     auto opGraph = b.create<func::CallOp>(createOpGraph.getSymName(),
                                           OperationGraphType::get(ctx),
                                           adaptor.getOperands());

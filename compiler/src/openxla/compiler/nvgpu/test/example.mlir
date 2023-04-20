@@ -1,4 +1,4 @@
-// RUN: iree-opt %s --iree-plugin=openxla_nvgpu --pass-pipeline='builtin.module(openxla-nvgpu-convert-mhlo-to-cudnn)' | FileCheck %s
+// RUN: iree-opt %s --iree-plugin=openxla_nvgpu --pass-pipeline='builtin.module(openxla-nvgpu-convert-hlo-to-cudnn)' | FileCheck %s
 
 !tensor = tensor<1x16x32x8xf32>
 

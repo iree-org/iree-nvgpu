@@ -4,7 +4,13 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-load("//build_tools/bazel:build_defs.oss.bzl", "iree_gentbl_cc_library", "iree_tablegen_doc", "iree_td_library")
+load(
+    "//build_tools/bazel:build_defs.oss.bzl",
+    "iree_compiler_cc_library",
+    "iree_gentbl_cc_library",
+    "iree_tablegen_doc",
+    "iree_td_library"
+)
 
 package(
     default_visibility = ["//visibility:public"],
@@ -22,10 +28,10 @@ iree_td_library(
     ],
 )
 
-cc_library(
+iree_compiler_cc_library(
     name = "Transforms",
     srcs = [
-        "ConvertMHLOToCUDNN.cpp",
+        "ConvertHLOToCUDNN.cpp",
     ],
     hdrs = [
         "Passes.h",
@@ -34,6 +40,7 @@ cc_library(
     deps = [
         ":PassesIncGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
+        "//compiler/src/openxla/compiler/nvgpu/Conversion:HLOToCUDNN"
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Pass",

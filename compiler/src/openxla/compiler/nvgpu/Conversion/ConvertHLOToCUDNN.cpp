@@ -14,7 +14,7 @@
 #include "mlir/IR/Matchers.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
-#include "openxla/compiler/nvgpu/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "stablehlo/dialect/StablehloOps.h"
 
 using namespace mlir;
@@ -23,6 +23,13 @@ namespace openxla::compiler::nvgpu::cudnn {
 
 static TensorType getCudnnTensorType(mlir::TensorType tensor_type) {
   return TensorType::get(tensor_type.getShape(), tensor_type.getElementType());
+}
+static FailureOr<Layout> getCudnnTensorLayout(int64_t batch_dim,
+                                              int64_t feature_dim) {
+  if (batch_dim != 0) return failure();
+  if (feature_dim == 1) return Layout::NCHW;
+  if (feature_dim == 3) return Layout::NHWC;
+  return failure();
 }
 
 // Outlines all transitive ops defining 'result' into a cudnn.graph op and calls
@@ -34,6 +41,8 @@ static LogicalResult outlineToGraph(
   Operation* root = result.getDefiningOp();
   if (!root)
     return rewriter.notifyMatchFailure(result.getLoc(), "expected def by op");
+  if (root->getNumResults() != 1)
+    return rewriter.notifyMatchFailure(result.getLoc(), "expected one result");
   func::FuncOp func = root->getParentOfType<func::FuncOp>();
   if (!func) return rewriter.notifyMatchFailure(root, "expected child of func");
 
@@ -81,7 +90,9 @@ static LogicalResult outlineToGraph(
     results = rewriter.clone(*op, mapping)->getResults();
     mapping.map(op->getResults(), results);
   }
-  rewriter.create<ReturnOp>(root->getLoc(), results);
+  auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
+      result.getLoc(), func_type.getResults(), results);
+  rewriter.create<ReturnOp>(root->getLoc(), cast_op.getResults());
 
   // Replace root with cudnn.call op.
   rewriter.setInsertionPoint(root);
@@ -106,6 +117,55 @@ static FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
   }
   return min;
 }
+// Returns whether 'op' can be converted to cudnn.convolution.
+LogicalResult matchConv(stablehlo::ConvolutionOp op,
+                        PatternRewriter& rewriter) {
+  if (op.getBatchGroupCount() != 1)
+    return rewriter.notifyMatchFailure(op,
+                                       "expected batch_group_count to be 1");
+  if (op.getFeatureGroupCount() != 1)
+    return rewriter.notifyMatchFailure(op,
+                                       "expected feature_group_count to be 1");
+  if (op.getPrecisionConfig())
+    return rewriter.notifyMatchFailure(op, "expected no precision config");
+
+  auto is_none_or_value = [](std::optional<DenseIntElementsAttr> attr,
+                             int64_t value) {
+    return !attr || llvm::all_of(attr->getValues<APInt>(), [&](APInt value) {
+      return value.getSExtValue() == value;
+    });
+  };
+  if (!is_none_or_value(op.getLhsDilation(), 1))
+    return rewriter.notifyMatchFailure(op, "expected lhs_dilation to be 1");
+  if (!is_none_or_value(op.getRhsDilation(), 1))
+    return rewriter.notifyMatchFailure(op, "expected rhs_dilation to be 1");
+  if (op.getWindowReversal() &&
+      llvm::any_of(op.getWindowReversal()->getValues<bool>(),
+                   [](bool reversal) { return reversal; }))
+    return rewriter.notifyMatchFailure(op, "expected no window_reversal");
+
+  auto dims = op.getDimensionNumbers();
+  if (dims.getInputSpatialDimensions().size() != 2 ||
+      dims.getOutputSpatialDimensions().size() != 2 ||
+      dims.getKernelSpatialDimensions().size() != 2) {
+    return rewriter.notifyMatchFailure(op, "expected 2D convolution");
+  }
+
+  // TODO(chsigg): support NHWC layout.
+  if (getCudnnTensorLayout(dims.getInputBatchDimension(),
+                           dims.getInputFeatureDimension()) != Layout::NCHW)
+    return rewriter.notifyMatchFailure(op, "expected input to be NCHW");
+  if (getCudnnTensorLayout(dims.getOutputBatchDimension(),
+                           dims.getOutputFeatureDimension()) != Layout::NCHW)
+    return rewriter.notifyMatchFailure(op, "expected output to be NCHW");
+  // TODO(chsigg): support HWIO.
+  if (getCudnnTensorLayout(dims.getKernelOutputFeatureDimension(),
+                           dims.getKernelInputFeatureDimension()) !=
+      Layout::NCHW)
+    return rewriter.notifyMatchFailure(op, "expected kernel to be OIHW");
+
+  return success();
+}
 
 // Matches any clamp 'op' which can be converted to relu and outlines it into
 // a cudnn.graph op.
@@ -116,6 +176,19 @@ static LogicalResult outlineClamp(stablehlo::ClampOp op,
   if (failed(matchRelu(op, rewriter))) return failure();
   return outlineToGraph(op.getResult(), op.getOperand(), rewriter);
 }
+static LogicalResult outlineConv(stablehlo::ConvolutionOp op,
+                                 PatternRewriter& rewriter) {
+  if (failed(matchConv(op, rewriter))) return failure();
+  return outlineToGraph(op.getResult(), {op.getLhs(), op.getRhs()}, rewriter);
+}
+
+static Value castToCudnnTensor(TypedValue<mlir::TensorType> value,
+                               PatternRewriter& rewriter) {
+  TensorType tensor_type = getCudnnTensorType(value.getType());
+  auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
+      value.getLoc(), tensor_type, value);
+  return cast_op.getResult(0);
+}
 
 // Converts a clamp 'op' into a cudnn.pointwise_relu.
 static LogicalResult convertClamp(stablehlo::ClampOp op,
@@ -124,22 +197,57 @@ static LogicalResult convertClamp(stablehlo::ClampOp op,
     return rewriter.notifyMatchFailure(op, "expected child of graph");
   auto min_or = matchRelu(op, rewriter);
   if (failed(min_or)) return failure();
-  auto operand = op.getOperand();
-  TensorType tensor_type = getCudnnTensorType(operand.getType());
-  auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
-      operand.getLoc(), tensor_type, operand);
+  Type result_type = getCudnnTensorType(op.getType());
+  Value operand = castToCudnnTensor(op.getOperand(), rewriter);
+  Type element_type = op.getType().getElementType();
   rewriter.replaceOpWithNewOp<PointWiseReluOp>(
-      op, tensor_type, cast_op.getResult(0), tensor_type.getElementType(),
+      op, result_type, operand, element_type,
       APFloat(min_or->convertToDouble()));
   return success();
 }
+// Converts convolution 'op' into a cudnn.convolution.
+static LogicalResult convertConv(stablehlo::ConvolutionOp op,
+                                 PatternRewriter& rewriter) {
+  if (!op->getParentOfType<GraphOp>())
+    return rewriter.notifyMatchFailure(op, "expected child of graph");
+  if (failed(matchConv(op, rewriter))) return failure();
+  Type result_type = getCudnnTensorType(op.getType());
+  Value lhs = castToCudnnTensor(op.getLhs(), rewriter);
+  Value rhs = castToCudnnTensor(op.getRhs(), rewriter);
+  Type element_type = op.getType().getElementType();
 
-void populateHLOToCUDNNPatterns(mlir::RewritePatternSet &patterns) {
-    // TODO(chsigg): don't outline and convert in the same pattern application.
-    // This currently works because the first expects the parent to be a child
-    // of func.func, the second one a child of cudnn.graph.
-    patterns.add(&outlineClamp);
-    patterns.add(&convertClamp);
+  APFloat alpha(1.0f);
+  APFloat beta(0.0f);
+
+  uint32_t spatial_dim_count =
+      op.getDimensionNumbers().getInputSpatialDimensions().size();
+  auto get_attr_or = [&](std::optional<DenseIntElementsAttr> attr,
+                         int64_t value) {
+    if (!attr) return SmallVector<int64_t>(spatial_dim_count, value);
+    SmallVector<int64_t> values;
+    llvm::transform(attr->getValues<APInt>(), std::back_inserter(values),
+                    [](APInt stride) { return stride.getSExtValue(); });
+    return values;
+  };
+  SmallVector<int64_t> spatial_stride = get_attr_or(op.getWindowStrides(), 1);
+  SmallVector<int64_t> pre_padding = get_attr_or(op.getPadding(), 0);
+  SmallVector<int64_t> post_padding(spatial_dim_count, 0);
+  SmallVector<int64_t> dilation = get_attr_or(op.getRhsDilation(), 1);
+
+  rewriter.replaceOpWithNewOp<ConvolutionOp>(
+      op, result_type, lhs, rhs, element_type, alpha, beta, spatial_dim_count,
+      spatial_stride, pre_padding, post_padding, dilation);
+  return success();
+}
+
+void populateOutlineHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {
+  patterns.add(&outlineClamp);
+  patterns.add(&outlineConv);
+}
+
+void populateConvertHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {
+  patterns.add(&convertClamp);
+  patterns.add(&convertConv);
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

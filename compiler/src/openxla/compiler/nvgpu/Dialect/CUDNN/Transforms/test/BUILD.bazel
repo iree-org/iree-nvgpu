@@ -16,7 +16,7 @@ iree_lit_test_suite(
     name = "lit",
     srcs = enforce_glob(
         [
-            "simple.mlir",
+            "cudnn_to_runtime.mlir",
         ],
         include = ["*.mlir"],
     ),

@@ -46,12 +46,12 @@ cc_library(
 cc_library(
     name = "Transforms",
     srcs = [
-        "ConvertCuDNNToRuntime.cpp",
+        "ConvertCUDNNToRuntime.cpp",
     ],
     hdrs = ["Passes.h"],
     deps = [
         ":PassHeaders",
-        "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/CuDNNToRuntime",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/CUDNNToRuntime",
         "@llvm-project//mlir:Pass",
     ],
 )

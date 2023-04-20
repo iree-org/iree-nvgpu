@@ -4,11 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/ConvertCuDNNToRuntime.h>
+#include <openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/ConvertCUDNNToRuntime.h>
 #include <openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h>
+#include <openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h>
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/Types.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/PassDetail.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
@@ -20,33 +23,37 @@ using namespace mlir;
 
 namespace openxla::compiler::nvgpu::cudnn {
 
-class ConvertCuDNNToRuntime
-    : public ::impl::ConvertCuDNNToRuntimeBase<ConvertCuDNNToRuntime> {
+class ConverCudnnToRuntime
+    : public ::impl::ConvertCudnnToRuntimeBase<ConverCudnnToRuntime> {
  public:
   void runOnOperation() override {
     auto *context = &getContext();
 
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) { return type; });
+    typeConverter.addConversion([](cudnn::TensorType tensor) {
+      return cudnn::TensorType::get(tensor.getContext());
+    });
 
     // Ensure all cuDNN dialect operations go away.
     ConversionTarget conversionTarget(*context);
     conversionTarget.addIllegalDialect<cudnn::CUDNNDialect>();
     conversionTarget.addLegalDialect<func::FuncDialect>();
+    conversionTarget.addLegalDialect<arith::ArithDialect>();
 
     RewritePatternSet patterns(&getContext());
-    populateCuDNNToRuntimePatterns(typeConverter, patterns);
+    populateCudnnToRuntimePatterns(typeConverter, patterns);
 
-    if (failed(applyFullConversion(getOperation(), conversionTarget,
-                                   std::move(patterns)))) {
+    if (failed(applyPartialConversion(getOperation(), conversionTarget,
+                                      std::move(patterns)))) {
       getOperation().emitError() << "conversion from cuDNN to runtime failed";
       return signalPassFailure();
     }
   }
 };
 
-std::unique_ptr<OperationPass<ModuleOp>> createConvertCuDNNToRuntimePass() {
-  return std::make_unique<ConvertCuDNNToRuntime>();
+std::unique_ptr<OperationPass<ModuleOp>> createConvertCudnnToRuntimePass() {
+  return std::make_unique<ConverCudnnToRuntime>();
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

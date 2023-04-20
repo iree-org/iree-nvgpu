@@ -52,38 +52,6 @@ def CUDNN_PointWiseReluOp : CUDNN_Op<"pointwise_relu", [Pure]> {
     }];
 }
 
-// Convolutions
-// ------------
-def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
-    let summary = "Convolution";
-
-    let arguments = (ins
-      CUDNN_TensorDescType:$x,
-      CUDNN_TensorDescType:$w,
-      TypeAttr:$element_type,
-      F32Attr:$alpha,
-      F32Attr:$beta,
-      I32Attr:$spatial_dim_count,
-      DenseI64ArrayAttr:$spatial_stride,
-      DenseI64ArrayAttr:$pre_padding,
-      DenseI64ArrayAttr:$post_padding,
-      DenseI64ArrayAttr:$dilation
-    );
-    let results = (outs CUDNN_TensorDescType:$y);
-
-    let assemblyFormat = [{
-      `(` $x `,` $w `)` `type` `=` $element_type
-         `alpha` `=` $alpha
-         `beta` `=` $beta
-         `spatial_dim_count` `=` $spatial_dim_count
-         `spatial_stride` `=`  $spatial_stride
-         `pre_padding` `=` $pre_padding
-         `post_padding` `=` $post_padding
-         `dilation` `=` $dilation
-         attr-dict `:` qualified(type($x)) `,` qualified(type($w)) `->` qualified(type($y))
-    }];
-}
-
 def CUDNN_CrossCorrelationOp : CUDNN_Op<"cross_correlation", [Pure]> {
     let summary = "Cross correlation";
 
@@ -193,6 +161,43 @@ def CUDNN_GetCurrentHandle : CUDNN_Op<"get_current_handle", [Pure]> {
     let arguments = (ins);
     let results = (outs CUDNN_HandleType:$handle);
     let assemblyFormat = [{ attr-dict type($handle) }];
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.convolution operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
+    let summary = "Convolution";
+
+    let arguments = (ins
+      CUDNN_TensorType:$x,
+      CUDNN_TensorType:$w,
+      F32Attr:$alpha,
+      F32Attr:$beta,
+      I32Attr:$spatial_dim_count,
+      DenseI64ArrayAttr:$spatial_stride,
+      DenseI64ArrayAttr:$pre_padding,
+      DenseI64ArrayAttr:$post_padding,
+      DenseI64ArrayAttr:$dilation
+    );
+
+    let results = (outs CUDNN_TensorType:$y);
+
+    let assemblyFormat = [{
+      `(` $x `,` $w `)`
+         `alpha` `=` $alpha
+         `beta` `=` $beta
+         `spatial_dim_count` `=` $spatial_dim_count
+         `spatial_stride` `=`  $spatial_stride
+         `pre_padding` `=` $pre_padding
+         `post_padding` `=` $post_padding
+         `dilation` `=` $dilation
+         attr-dict `:`
+         functional-type(operands, results)
+    }];
+
+    // TODO(ezhulenev): Add a custom verifier to check for shape errors.
 }
 
 //===----------------------------------------------------------------------===//

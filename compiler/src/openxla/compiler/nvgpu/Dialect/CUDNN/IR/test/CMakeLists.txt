@@ -14,6 +14,8 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
+    "invalid.mlir"
+    "ops.mlir"
     "types.mlir"
   TOOLS
     FileCheck

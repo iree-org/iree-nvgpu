@@ -18,7 +18,7 @@ namespace openxla::compiler::nvgpu::cudnn {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createConvertCuDNNToRuntimePass();
+createConvertCudnnToRuntimePass();
 
 }  // namespace openxla::compiler::nvgpu::cudnn
 

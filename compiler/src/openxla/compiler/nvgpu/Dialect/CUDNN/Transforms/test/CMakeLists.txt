@@ -14,7 +14,7 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
-    "simple.mlir"
+    "cudnn_to_runtime.mlir"
   TOOLS
     FileCheck
     iree-opt

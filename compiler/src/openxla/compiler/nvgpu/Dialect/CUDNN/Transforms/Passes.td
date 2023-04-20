@@ -9,16 +9,17 @@ include "mlir/Pass/PassBase.td"
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_
 
-def ConvertCuDNNToRuntime :
+def ConvertCudnnToRuntime :
     Pass<"openxla-nvgpu-convert-cudnn-to-runtime", "mlir::ModuleOp"> {
   let summary = "Converts cuDNN operations to cuDNN runtime calls";
 
   let constructor = [{
-    ::openxla::compiler::nvgpu::cudnn::createConvertCuDNNToRuntimePass()
+    ::openxla::compiler::nvgpu::cudnn::createConvertCudnnToRuntimePass()
   }];
 
   let dependentDialects = [
     "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
+    "::mlir::func::FuncDialect",
   ];
 }
 

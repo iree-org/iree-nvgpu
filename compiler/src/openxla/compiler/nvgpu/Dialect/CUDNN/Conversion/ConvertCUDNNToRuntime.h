@@ -15,7 +15,7 @@ namespace openxla::compiler::nvgpu::cudnn {
 // Appends cuDNN dialect to cudNN runtime patterns to the given pattern list.
 // Conversion patterns lower from cuDNN dialect operations to function calls
 // corresponding to the cuDNN runtime (implemented as a custom VM module).
-void populateCuDNNToRuntimePatterns(mlir::TypeConverter &typeConverter,
+void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
                                     mlir::RewritePatternSet &patterns);
 
 }  // namespace openxla::compiler::nvgpu::cudnn

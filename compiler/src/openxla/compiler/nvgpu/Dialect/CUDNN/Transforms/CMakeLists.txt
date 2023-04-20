@@ -39,11 +39,11 @@ iree_cc_library(
   HDRS
     "Passes.h"
   SRCS
-    "ConvertCuDNNToRuntime.cpp"
+    "ConvertCUDNNToRuntime.cpp"
   DEPS
     ::PassHeaders
     MLIRPass
-    openxla::compiler::nvgpu::Dialect::CUDNN::Conversion::CuDNNToRuntime
+    openxla::compiler::nvgpu::Dialect::CUDNN::Conversion::CUDNNToRuntime
   PUBLIC
 )
 

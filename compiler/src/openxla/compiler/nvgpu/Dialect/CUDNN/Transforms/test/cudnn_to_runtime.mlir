@@ -3,7 +3,7 @@
 // RUN:   | FileCheck %s
 
 cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x8xf32>)
-                     -> !cudnn.tensor<1x4x8xf32> {
+                       -> !cudnn.tensor<1x4x8xf32> {
   cudnn.return %arg0: !cudnn.tensor<1x4x8xf32>
 }
 
@@ -19,3 +19,26 @@ cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x8xf32>)
 
 // CHECK: @cudnn.tensor.create.3d(i64, i64, i64, i64) -> !cudnn.tensor
 // CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
+
+// -----
+
+cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x8xi32>)
+                       -> !cudnn.tensor<1x4x8xi32> {
+  cudnn.return %arg0: !cudnn.tensor<1x4x8xi32>
+}
+
+// CHECK: func.func @graph.builder() -> !cudnn.operation_graph {
+// CHECK:   %[[DT:.*]] = arith.constant 4 : i64
+// CHECK:   call @cudnn.tensor.create.3d(%[[DT]],
+// CHECK: }
+
+// -----
+
+cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x4x32xi32, NHWC>)
+                       -> !cudnn.tensor<1x4x4x32xi32, NHWC> {
+  cudnn.return %arg0: !cudnn.tensor<1x4x4x32xi32, NHWC>
+}
+
+// CHECK: func.func @graph.builder() -> !cudnn.operation_graph {
+// CHECK:   call @cudnn.tensor.create.4d.nhwc
+// CHECK: }

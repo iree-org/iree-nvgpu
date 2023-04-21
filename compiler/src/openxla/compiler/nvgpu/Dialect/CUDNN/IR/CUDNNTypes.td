@@ -62,6 +62,43 @@ def CUDNN_TensorDescType : CUDNN_Type<"TensorDesc", "tensor_desc"> {
 }
 
 //===----------------------------------------------------------------------===//
+// cuDNN data type corresponding to cudnnDataType_t
+//===----------------------------------------------------------------------===//
+
+def CUDNN_DATATYPE_FLOAT    : I32EnumAttrCase<"FLOAT", 0>;
+def CUDNN_DATATYPE_DOUBLE   : I32EnumAttrCase<"DOUBLE", 1>;
+def CUDNN_DATATYPE_HALF     : I32EnumAttrCase<"HALF", 2>;
+def CUDNN_DATATYPE_INT8     : I32EnumAttrCase<"INT8", 3>;
+def CUDNN_DATATYPE_INT32    : I32EnumAttrCase<"INT32", 4>;
+def CUDNN_DATATYPE_INT8x4   : I32EnumAttrCase<"INT8x4", 5>;
+def CUDNN_DATATYPE_UINT8    : I32EnumAttrCase<"UINT8", 6>;
+def CUDNN_DATATYPE_UINT8x4  : I32EnumAttrCase<"UINT8x4", 7>;
+def CUDNN_DATATYPE_INT8x32  : I32EnumAttrCase<"INT8x32", 8>;
+def CUDNN_DATATYPE_BFLOAT16 : I32EnumAttrCase<"BFLOAT16", 9>;
+def CUDNN_DATATYPE_INT64    : I32EnumAttrCase<"INT64", 10>;
+def CUDNN_DATATYPE_BOOLEAN  : I32EnumAttrCase<"BOOLEAN", 11>;
+
+def CUDNN_DATATYPE : I32EnumAttr<"DataType",
+    "cuDNN data type",
+    [
+      CUDNN_DATATYPE_FLOAT,
+      CUDNN_DATATYPE_DOUBLE,
+      CUDNN_DATATYPE_HALF,
+      CUDNN_DATATYPE_INT8,
+      CUDNN_DATATYPE_INT32,
+      CUDNN_DATATYPE_INT8x4,
+      CUDNN_DATATYPE_UINT8,
+      CUDNN_DATATYPE_UINT8x4,
+      CUDNN_DATATYPE_INT8x32,
+      CUDNN_DATATYPE_BFLOAT16,
+      CUDNN_DATATYPE_INT64,
+      CUDNN_DATATYPE_BOOLEAN
+    ]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::openxla::compiler::nvgpu::cudnn";
+}
+
+//===----------------------------------------------------------------------===//
 // cuDNN data layout formats
 //===----------------------------------------------------------------------===//
 
@@ -139,7 +176,7 @@ def CUDNN_TensorType : CUDNN_Type<"Tensor", "tensor"> {
         return $_get(elementType.getContext(), shape, elementType,
                      layout, AffineMap());
       }]>,
-      TypeBuilderWithInferredContext<(ins "llvm::ArrayRef<int64_t>":$shape, 
+      TypeBuilderWithInferredContext<(ins "llvm::ArrayRef<int64_t>":$shape,
                                           "Type":$elementType,
                                           "mlir::AffineMap":$strides), [{
         return $_get(elementType.getContext(), shape, elementType,

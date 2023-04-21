@@ -19,6 +19,7 @@ def ConvertCudnnToRuntime :
 
   let dependentDialects = [
     "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
+    "::mlir::iree_compiler::IREE::HAL::HALDialect",
     "::mlir::func::FuncDialect",
   ];
 }

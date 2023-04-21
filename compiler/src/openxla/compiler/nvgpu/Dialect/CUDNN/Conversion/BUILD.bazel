@@ -20,6 +20,7 @@ cc_library(
     hdrs = ["ConvertCUDNNToRuntime.h"],
     deps = [
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
+        "@iree_core//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",

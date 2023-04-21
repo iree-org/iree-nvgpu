@@ -35,11 +35,58 @@ namespace openxla::runtime::nvgpu {
 using namespace iree;
 
 //===----------------------------------------------------------------------===//
+// Helper functions for tensor layouts
+//===----------------------------------------------------------------------===//
+
+template <size_t n>
+static std::array<int64_t, n> ToArr(span<const int64_t> span) {
+  std::array<int64_t, n> arr;
+  std::copy_n(span.begin(), n, arr.begin());
+  return arr;
+}
+
+struct RowMajor {
+  template <size_t n>
+  static std::array<int64_t, n> strides(std::array<int64_t, n> dims) {
+    return ToArr<n>(GetRowMajorStrides(dims));
+  }
+};
+
+struct NHWC {
+  static std::array<int64_t, 4> strides(std::array<int64_t, 4> dims) {
+    return ToArr<4>(GetChannelsLastStrides(dims));
+  }
+};
+
+// Converts cuDNN tensor shape + strides into a row-major shape that can be
+// used to construct HAL buffer views.
+static std::vector<iree_host_size_t> GetRowMajorShape(
+    const cudnn_frontend::Tensor& tensor) {
+  const int64_t* dim = tensor.getDim();
+  const int64_t* stride = tensor.getStride();
+
+  std::vector<int64_t> indices(tensor.getDimCount());
+  std::iota(indices.begin(), indices.end(), 0);
+  std::sort(indices.begin(), indices.end(),
+            [&](int64_t a, int64_t b) { return stride[a] > stride[b]; });
+
+  std::vector<iree_host_size_t> dims(tensor.getDimCount());
+  for (size_t i = 0; i < indices.size(); ++i) dims[i] = dim[indices[i]];
+
+  return dims;
+}
+
+//===----------------------------------------------------------------------===//
 // CuDNN module state encapsulates all the state required for running cuDNN
 // operations (launching cuDNN graphs on a stream) at run time.
 //===----------------------------------------------------------------------===//
 
 class CuDNNModuleState {
+  // TODO(ezhulenev): This is a random value and never really verified at run
+  // time. We always have to check that buffers we see at run time are properly
+  // aligned according to what we promised to cuDNN.
+  static constexpr int64_t kAlignment = 32;
+
  public:
   CuDNNModuleState(iree_hal_device_t* device, iree_allocator_t host_allocator,
                    iree_hal_cuda_dynamic_symbols_t cuda_syms,
@@ -48,11 +95,25 @@ class CuDNNModuleState {
 
   enum class TensorFormat { kRowMajor, kChannelsLast };
 
-  // Creates a new tensor for cuDNN graph argument.
-  template <TensorFormat format = TensorFormat::kRowMajor>
-  StatusOr<vm::ref<CuDNNTensor>> Argument(int64_t dtype,
-                                          const vm::ref<iree_vm_list_t> dims,
-                                          int64_t uid, int64_t alignment);
+  // Creates a new tensor with given shape and layout.
+  template <size_t rank, typename Layout = RowMajor>
+  StatusOr<vm::ref<CuDNNTensor>> TensorCreate(
+      int64_t dtype, std::array<int64_t, rank> dimensions);
+
+  // Creates a cuDNN operation graph computing `tensor` result.
+  StatusOr<vm::ref<CuDNNOperationGraph>> OperationGraphCreate(
+      const vm::ref<CuDNNTensor> tensor);
+
+  // Creates a cuDNN executable from the given operation graph.
+  StatusOr<vm::ref<CuDNNExecutable>> Executable(
+      const vm::ref<CuDNNOperationGraph> graph);
+
+  // Executes cuDNN executable with given HAL buffer view inputs and returns
+  // result as a HAL buffer view.
+  template <size_t n>
+  StatusOr<vm::ref<iree_hal_buffer_view_t>> Execute(
+      const vm::ref<CuDNNExecutable> executable,
+      std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs);
 
   // Creates a pointwise relu operation and returns result tensor.
   StatusOr<vm::ref<CuDNNTensor>> PointwiseRelu(const vm::ref<CuDNNTensor> input,
@@ -61,34 +122,13 @@ class CuDNNModuleState {
                                                int64_t alignment);
 
   // Creates a convolution operation and returns result tensor.
-  StatusOr<vm::ref<CuDNNTensor>> Convolution(const vm::ref<CuDNNTensor> input,
-                                             const vm::ref<CuDNNTensor> filter,
-                                             int64_t uid, int64_t alignment);
-
-  // TODO(ezhulenev): To be able to pass a list of tensors, `!cudnn.tensor` has
-  // to be registered as a ref type (see `IREE::VM::RefType` and`!vmvx.buffer`
-  // which is registered as reference type and can be added to the list).
-
-  // Creates a cuDNN graph computing `tensor` result.
-  StatusOr<vm::ref<CuDNNOperationGraph>> CreateGraph(
-      const vm::ref<CuDNNTensor> tensor);
-
-  // Creates a cuDNN executable from the given operation graph.
-  StatusOr<vm::ref<CuDNNExecutable>> Executable(
-      const vm::ref<CuDNNOperationGraph> graph);
-
-  // TODO(ezhulenev): This is proof of concept for executing a cuDNN graph with
-  // a single convolution operation. We need to figure out how to pass a list
-  // of buffers to graph inputs, and potentially return multiple results.
-
-  // Executes cuDNN executable with given HAL buffer view inputs and returns
-  // result as a HAL buffer view.
-  StatusOr<vm::ref<iree_hal_buffer_view_t>> Execute(
-      const vm::ref<CuDNNExecutable> executable,
-      const vm::ref<iree_hal_buffer_view_t> input,
-      const vm::ref<iree_hal_buffer_view_t> filter,
-      const vm::ref<iree_hal_fence_t> wait_fence,
-      const vm::ref<iree_hal_fence_t> signal_fence);
+  template <size_t spatial_dims>
+  StatusOr<vm::ref<CuDNNTensor>> Convolution(
+      const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> w,
+      std::array<int64_t, spatial_dims> stride,
+      std::array<int64_t, spatial_dims> pre_padding,
+      std::array<int64_t, spatial_dims> post_padding,
+      std::array<int64_t, spatial_dims> dilation);
 
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
@@ -110,6 +150,9 @@ class CuDNNModuleState {
   // state object will be synchronized by the caller, so we can safely access
   // cuDNN handle without any additional synchronization.
   cudnnHandle_t handle_;
+
+  // We use automatic uid assignment for all cuDNN tensors in the graph.
+  uint64_t uid = 0;
 };
 
 CuDNNModuleState::CuDNNModuleState(iree_hal_device_t* device,
@@ -133,28 +176,13 @@ static StatusOr<cudnnDataType_t> ToCudnnDataType(int64_t dtype) {
   return static_cast<cudnnDataType_t>(dtype);
 }
 
-static StatusOr<std::vector<int64_t>> LoadI64Vec(const iree_vm_list_t* list) {
-  std::vector<int64_t> vector(iree_vm_list_size(list));
-  for (size_t i = 0; i < vector.size(); ++i) {
-    iree_vm_value_t value;
-    IREE_RETURN_IF_ERROR(
-        iree_vm_list_get_value_as(list, i, IREE_VM_VALUE_TYPE_I64, &value));
-    vector[i] = value.i64;
-  }
-  return vector;
-}
-
-template <CuDNNModuleState::TensorFormat format>
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Argument(
-    int64_t dtype, const vm::ref<iree_vm_list_t> dims, int64_t uid,
-    int64_t alignment) {
+template <size_t rank, typename Layout>
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::TensorCreate(
+    int64_t dtype, std::array<int64_t, rank> dimensions) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
-  IREE_ASSIGN_OR_RETURN(std::vector<int64_t> dimensions, LoadI64Vec(&*dims));
-
-  std::vector<int64_t> strides = format == TensorFormat::kRowMajor
-                                     ? GetRowMajorStrides(dimensions)
-                                     : GetChannelsLastStrides(dimensions);
-  return CreateArgument(&syms_, dimensions, strides, uid, data_type, alignment);
+  std::array<int64_t, rank> strides = Layout::strides(dimensions);
+  return CreateArgument(&syms_, dimensions, strides, uid++, data_type,
+                        kAlignment);
 }
 
 Status CuDNNModuleState::PrintTensorDebug(const vm::ref<CuDNNTensor> tensor) {
@@ -177,13 +205,17 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
                              alignment);
 }
 
+template <size_t spatial_dims>
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
-    const vm::ref<CuDNNTensor> input, const vm::ref<CuDNNTensor> filter,
-    int64_t uid, int64_t alignment) {
-  return CreateConvolution(&syms_, *input, *filter, uid, alignment);
+    const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> w,
+    std::array<int64_t, spatial_dims> stride,
+    std::array<int64_t, spatial_dims> pre_padding,
+    std::array<int64_t, spatial_dims> post_padding,
+    std::array<int64_t, spatial_dims> dilation) {
+  return CreateConvolution(&syms_, *x, *w, uid++, kAlignment);
 }
 
-StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::CreateGraph(
+StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(
     const vm::ref<CuDNNTensor> tensor) {
   return CreateOperationGraph(&syms_, handle_, {tensor.get()});
 }
@@ -193,23 +225,16 @@ StatusOr<vm::ref<CuDNNExecutable>> CuDNNModuleState::Executable(
   return CreateExecutable(&syms_, handle_, *graph);
 }
 
+template <size_t n>
 StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
     const vm::ref<CuDNNExecutable> executable,
-    const vm::ref<iree_hal_buffer_view_t> input,
-    const vm::ref<iree_hal_buffer_view_t> filter,
-    const vm::ref<iree_hal_fence_t> wait_fence,
-    const vm::ref<iree_hal_fence_t> signal_fence) {
+    std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs) {
   // Arguments and results defined by the operation graph.
   std::vector<CuDNNTensor*> args = executable->graph().args();
   std::vector<CuDNNTensor*> rets = executable->graph().rets();
-
-  // TODO(ezhulenev): Remove this asserts once we support more complex graphs.
-  IREE_ASSERT_EQ(args.size(), 2);
   IREE_ASSERT_EQ(rets.size(), 1);
 
   // Tensors required for running single convolution operation.
-  // const cudnn_frontend::Tensor& input = args[0]->tensor();
-  // const cudnn_frontend::Tensor& filter = args[1]->tensor();
   const cudnn_frontend::Tensor& output = rets[0]->tensor();
 
   // Allocate buffer for tensor output.
@@ -234,8 +259,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
 
   vm::ref<iree_hal_buffer_t> output_buffer;
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
-      device_, IREE_HAL_QUEUE_AFFINITY_ANY,
-      iree_hal_fence_semaphore_list(wait_fence.get()),
+      device_, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
       iree_hal_fence_semaphore_list(alloca_fence.get()),
       IREE_HAL_ALLOCATOR_POOL_DEFAULT, output_buffer_params, output_byte_length,
       &output_buffer));
@@ -244,23 +268,22 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
   IREE_RETURN_IF_ERROR(
       iree_hal_fence_wait(alloca_fence.get(), iree_infinite_timeout()));
 
-  std::vector<iree_hal_buffer_t*> buffers = {
-      iree_hal_buffer_view_buffer(input.get()),
-      iree_hal_buffer_view_buffer(filter.get()), output_buffer.get()};
+  // Get underlying buffers from buffer view inputs.
+  std::vector<iree_hal_buffer_t*> buffers(inputs.size() + 1);
+  for (unsigned i = 0; i < inputs.size(); ++i) {
+    buffers[i] = iree_hal_buffer_view_buffer(inputs[i].get());
+  }
+  buffers.back() = output_buffer.get();
 
   // TODO(ezhulenev): Allocate workspace required for running executable.
   IREE_RETURN_IF_ERROR(executable->Execute(handle_, buffers));
 
-  // Signal fence after completing execution.
-  IREE_RETURN_IF_ERROR(iree_hal_fence_signal(signal_fence.get()));
-
   // Wrap the buffer in a buffer view that provides the metadata for
   // runtime verification.
   vm::ref<iree_hal_buffer_view_t> output_view;
-  std::vector<iree_host_size_t> dims(output.getDim(),
-                                     output.getDim() + output.getDimCount());
+  std::vector<iree_host_size_t> output_shape = GetRowMajorShape(output);
   IREE_RETURN_IF_ERROR(iree_hal_buffer_view_create(
-      output_buffer.get(), dims.size(), dims.data(),
+      output_buffer.get(), output_shape.size(), output_shape.data(),
       IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
       host_allocator_, &output_view));
 
@@ -273,30 +296,29 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
 
 using iree::vm::MakeNativeFunction;
 
-static constexpr CuDNNModuleState::TensorFormat NHWC =
-    CuDNNModuleState::TensorFormat::kChannelsLast;
+using State = CuDNNModuleState;
 
-static const vm::NativeFunction<CuDNNModuleState> kCuDNNModuleFunctions[] = {
-    // Tensor arguments
-    MakeNativeFunction("tensor.arg", &CuDNNModuleState::Argument<>),
-    MakeNativeFunction("tensor.arg.nhwc", &CuDNNModuleState::Argument<NHWC>),
+static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
+    // Create cuDNN tensors
+    MakeNativeFunction("tensor.create.4d", &State::TensorCreate<4>),
+    MakeNativeFunction("tensor.create.4d.nhwc", &State::TensorCreate<4, NHWC>),
 
-    // cuDNN operations
-    MakeNativeFunction("pointwise_relu", &CuDNNModuleState::PointwiseRelu),
-    MakeNativeFunction("convolution", &CuDNNModuleState::Convolution),
-
-    // cuDNN graph construction
-    MakeNativeFunction("graph.create", &CuDNNModuleState::CreateGraph),
+    // cuDNN operation graph construction
+    MakeNativeFunction("operation_graph.create", &State::OperationGraphCreate),
 
     // cuDNN executable construction
-    MakeNativeFunction("executable.create", &CuDNNModuleState::Executable),
+    MakeNativeFunction("executable.create", &State::Executable),
 
     // Execute cuDNN executable with buffer inputs
-    MakeNativeFunction("execute", &CuDNNModuleState::Execute),
+    MakeNativeFunction("execute.2", &State::Execute<2>),
+
+    // cuDNN operations
+    MakeNativeFunction("pointwise_relu", &State::PointwiseRelu),
+    MakeNativeFunction("convolution.2d", &State::Convolution<2>),
 
     // Debugging operations
-    MakeNativeFunction("debug.tensor", &CuDNNModuleState::PrintTensorDebug),
-    MakeNativeFunction("debug.graph", &CuDNNModuleState::PrintGraphDebug),
+    MakeNativeFunction("debug.tensor", &State::PrintTensorDebug),
+    MakeNativeFunction("debug.graph", &State::PrintGraphDebug),
 };
 
 //===----------------------------------------------------------------------===//

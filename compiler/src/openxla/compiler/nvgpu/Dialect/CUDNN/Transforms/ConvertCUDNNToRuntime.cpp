@@ -19,6 +19,8 @@
 #define GEN_PASS_DEF_CONVERTCUDNNTORUNTIME
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
 
+namespace IREE = mlir::iree_compiler::IREE;
+
 using namespace mlir;
 
 namespace openxla::compiler::nvgpu::cudnn {
@@ -40,6 +42,7 @@ class ConverCudnnToRuntime
     conversionTarget.addIllegalDialect<cudnn::CUDNNDialect>();
     conversionTarget.addLegalDialect<func::FuncDialect>();
     conversionTarget.addLegalDialect<arith::ArithDialect>();
+    conversionTarget.addLegalDialect<IREE::HAL::HALDialect>();
 
     RewritePatternSet patterns(&getContext());
     populateCudnnToRuntimePatterns(typeConverter, patterns);

@@ -61,6 +61,10 @@ def CUDNN_TensorDescType : CUDNN_Type<"TensorDesc", "tensor_desc"> {
     }];
 }
 
+def CUDNN_ExecutableType : CUDNN_Type<"Executable", "executable"> {
+    let summary = "cuDNN Executable";
+}
+
 //===----------------------------------------------------------------------===//
 // cuDNN data type corresponding to cudnnDataType_t
 //===----------------------------------------------------------------------===//

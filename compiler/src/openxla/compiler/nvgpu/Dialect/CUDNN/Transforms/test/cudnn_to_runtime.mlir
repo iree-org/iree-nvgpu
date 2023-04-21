@@ -72,3 +72,28 @@ cudnn.graph @convolution(
 // CHECK: @cudnn.convolution.2d(!cudnn.tensor, !cudnn.tensor, i64, i64, i64,
 // CHECK-SAME:                  i64, i64, i64, i64, i64, i64) -> !cudnn.tensor
 // CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
+
+// -----
+
+cudnn.graph @graph(%arg: !cudnn.tensor<1x4x8xf32>) -> !cudnn.tensor<1x4x8xf32> {
+  cudnn.return %arg: !cudnn.tensor<1x4x8xf32>
+}
+
+func.func @main(%arg: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
+  %0 = cudnn.call @graph(%arg) : (tensor<1x4x8xf32>) -> tensor<1x4x8xf32>
+  return %0 : tensor<1x4x8xf32>
+}
+
+// CHECK: func.func @graph.builder() -> !cudnn.operation_graph
+
+// CHECK: func.func @main(%[[ARG:.*]]: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
+// CHECK:   %[[G:.*]] = call @graph.builder()
+// CHECK:   %[[E:.*]] = call @cudnn.executeable.create(%[[G]])
+// CHECK:   %[[BUF0:.*]] = hal.tensor.export %[[ARG]] "graph.arg.0"
+// CHECK:   %[[BUF1:.*]] = call @cudnn.execute.1(%[[E]], %[[BUF0]])
+// CHECK:   %[[RES:.*]] = hal.tensor.import %[[BUF1]] "graph.result"
+// CHECK:   return %[[RES]] : tensor<1x4x8xf32>
+// CHECK: }
+
+// CHECK: @cudnn.executeable.create(!cudnn.operation_graph) -> !cudnn.executable
+// CHECK: @cudnn.execute.1(!cudnn.executable, !hal.buffer_view) -> !hal.buffer_view

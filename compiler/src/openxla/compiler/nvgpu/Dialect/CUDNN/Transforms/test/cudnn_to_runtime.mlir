@@ -13,7 +13,7 @@ cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x8xf32>)
 // CHECK:   %[[D1:.*]] = arith.constant 4 : i64
 // CHECK:   %[[D2:.*]] = arith.constant 8 : i64
 // CHECK:   %[[ARG:.*]] = call @cudnn.tensor.create.3d(%[[DT]], %[[D0]], %[[D1]], %[[D2]])
-// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[ARG0]])
+// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[ARG]])
 // CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
 // CHECK: }
 
@@ -42,3 +42,33 @@ cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x4x32xi32, NHWC>)
 // CHECK: func.func @graph.builder() -> !cudnn.operation_graph {
 // CHECK:   call @cudnn.tensor.create.4d.nhwc
 // CHECK: }
+
+// -----
+
+cudnn.graph @convolution(
+  %image: !cudnn.tensor<8x32x4x4xf32, NHWC>,
+  %filter: !cudnn.tensor<32x32x1x1xf32, NHWC>
+) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
+  %0 = cudnn.convolution(%image, %filter) alpha=1.0 beta=0.0
+         spatial_dim_count=2
+         spatial_stride=[1,1]
+         pre_padding=[1,1]
+         post_padding=[1,1]
+         dilation=[1,1]
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<32x32x1x1xf32, NHWC>)
+    -> !cudnn.tensor<8x32x4x4xf32, NHWC>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
+}
+
+// CHECK: func.func @convolution.builder() -> !cudnn.operation_graph {
+// CHECK:   %[[X:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[W:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[Y:.*]] = call @cudnn.convolution.2d(%[[X]], %[[W]],
+// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[Y]])
+// CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
+// CHECK: }
+
+// CHECK: @cudnn.tensor.create.4d.nhwc(i64, i64, i64, i64, i64) -> !cudnn.tensor
+// CHECK: @cudnn.convolution.2d(!cudnn.tensor, !cudnn.tensor, i64, i64, i64,
+// CHECK-SAME:                  i64, i64, i64, i64, i64, i64) -> !cudnn.tensor
+// CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph

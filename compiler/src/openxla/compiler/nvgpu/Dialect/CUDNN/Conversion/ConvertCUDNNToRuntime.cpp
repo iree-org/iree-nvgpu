@@ -48,6 +48,10 @@ class CudnnAPI {
   func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
                                                ModuleOp module);
 
+  // Imports `@cudnn.convolution` into the module.
+  func::FuncOp getConvolutionFunction(PatternRewriter &rewriter,
+                                      ModuleOp module, int64_t spatial_dims);
+
  private:
   func::FuncOp addDecl(PatternRewriter &rewriter, ModuleOp module,
                        StringAttr name, FunctionType function_type);
@@ -98,6 +102,26 @@ func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
   auto function_type = FunctionType::get(ctx, args, rets);
   auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
   return addDecl(rewriter, module, function_name, function_type);
+}
+
+func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
+                                              ModuleOp module,
+                                              int64_t spatial_dims) {
+  MLIRContext *ctx = module->getContext();
+  auto tensor = cudnn::TensorType::get(ctx);
+
+  SmallVector<Type> args = {/*x=*/tensor, /*w=*/tensor};
+  size_t num_i64_args =
+      /* spatial_dim_count */ 1 +
+      /* stride, pre_padding, post_padding, dilation */ spatial_dims * 4;
+  args.resize(args.size() + num_i64_args, IntegerType::get(ctx, 64));
+
+  SmallVector<Type> rets = {/*y=*/tensor};
+  auto function_type = FunctionType::get(ctx, args, rets);
+
+  auto function_name = llvm::formatv("cudnn.convolution.{0}d", spatial_dims);
+  return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
+                 function_type);
 }
 
 //===----------------------------------------------------------------------===//
@@ -225,6 +249,43 @@ struct ConvertCudnnReturnOp : public CudnnOpConversionPattern<cudnn::ReturnOp> {
   }
 };
 
+//===----------------------------------------------------------------------===//
+// cudnn.convolution
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnConvolutionOp
+    : public CudnnOpConversionPattern<ConvolutionOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ConvolutionOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+
+    // Prepare arguments for convolution API call.
+    SmallVector<Value> args(adaptor.getOperands());
+    auto push_back = [&](llvm::ArrayRef<int64_t> values) {
+      for (int64_t value : values)
+        args.push_back(b.create<arith::ConstantIntOp>(value, 64));
+    };
+
+    push_back(op.getSpatialDimCount());
+    push_back(op.getSpatialStride());
+    push_back(op.getPrePadding());
+    push_back(op.getPostPadding());
+    push_back(op.getDilation());
+
+    // Replace convolution operation with a convolution API call.
+    auto createConvolution = api->getConvolutionFunction(
+        rewriter, op->getParentOfType<ModuleOp>(), op.getSpatialDimCount());
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, createConvolution.getSymName(), TensorType::get(ctx), args);
+
+    return success();
+  }
+};
+
 }  // namespace
 
 void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
@@ -233,6 +294,7 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   auto api = std::make_shared<CudnnAPI>();
   patterns.insert<ConvertCudnnGraphOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnReturnOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnConvolutionOp>(typeConverter, ctx, api);
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

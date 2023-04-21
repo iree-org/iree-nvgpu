@@ -31,6 +31,8 @@ namespace {
 
 namespace {
 
+namespace cudnn = openxla::compiler::nvgpu::cudnn;
+
 struct NvgpuOptions {
   bool flag = false;
 
@@ -49,7 +51,11 @@ struct NvgpuSession : public PluginSession<NvgpuSession, NvgpuOptions> {
   }
 
   void onRegisterDialects(DialectRegistry &registry) override {
-    registry.insert<openxla::compiler::nvgpu::cudnn::CUDNNDialect>();
+    registry.insert<cudnn::CUDNNDialect>();
+  }
+
+  void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    pm.addPass(cudnn::createConvertCudnnToRuntimePass());
   }
 };
 

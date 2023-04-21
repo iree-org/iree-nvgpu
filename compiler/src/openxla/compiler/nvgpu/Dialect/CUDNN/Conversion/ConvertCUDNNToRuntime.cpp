@@ -12,6 +12,8 @@
 #include <optional>
 #include <string>
 
+#include "compiler/src/iree/compiler/Dialect/HAL/IR/HALOps.h"
+#include "compiler/src/iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
@@ -28,6 +30,8 @@
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 
 namespace openxla::compiler::nvgpu::cudnn {
+
+namespace IREE = mlir::iree_compiler::IREE;
 
 using namespace mlir;
 
@@ -52,11 +56,19 @@ class CudnnAPI {
   func::FuncOp getConvolutionFunction(PatternRewriter &rewriter,
                                       ModuleOp module, int64_t spatial_dims);
 
+  // Imports `@cudnn.executable.create` into the module.
+  func::FuncOp getExecutableCreateFunction(PatternRewriter &rewriter,
+                                           ModuleOp module);
+
+  // Imports `@cudnn.execute` into the module.
+  func::FuncOp getExecuteFunction(PatternRewriter &rewriter, ModuleOp module,
+                                  int64_t num_args);
+
+  SymbolTable &symTable(ModuleOp module);
+
  private:
   func::FuncOp addDecl(PatternRewriter &rewriter, ModuleOp module,
                        StringAttr name, FunctionType function_type);
-
-  SymbolTable &symTable(ModuleOp module);
 
   SymbolTableCollection symTable_;
 };
@@ -111,15 +123,38 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
   auto tensor = cudnn::TensorType::get(ctx);
 
   SmallVector<Type> args = {/*x=*/tensor, /*w=*/tensor};
-  size_t num_i64_args =
-      /* spatial_dim_count */ 1 +
-      /* stride, pre_padding, post_padding, dilation */ spatial_dims * 4;
+  size_t num_i64_args = spatial_dims * 4;  // stride, padding x 2, dilation
   args.resize(args.size() + num_i64_args, IntegerType::get(ctx, 64));
 
   SmallVector<Type> rets = {/*y=*/tensor};
   auto function_type = FunctionType::get(ctx, args, rets);
 
   auto function_name = llvm::formatv("cudnn.convolution.{0}d", spatial_dims);
+  return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
+                 function_type);
+}
+
+func::FuncOp CudnnAPI::getExecutableCreateFunction(PatternRewriter &rewriter,
+                                                   ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  SmallVector<Type> args = {OperationGraphType::get(ctx)};
+  SmallVector<Type> rets = {ExecutableType::get(ctx)};
+  return addDecl(rewriter, module,
+                 StringAttr::get(ctx, "cudnn.executable.create"),
+                 FunctionType::get(ctx, args, rets));
+}
+
+func::FuncOp CudnnAPI::getExecuteFunction(PatternRewriter &rewriter,
+                                          ModuleOp module, int64_t num_args) {
+  MLIRContext *ctx = module->getContext();
+
+  SmallVector<Type> args = {ExecutableType::get(ctx)};
+  args.resize(args.size() + num_args, IREE::HAL::BufferViewType::get(ctx));
+
+  SmallVector<Type> rets = {IREE::HAL::BufferViewType::get(ctx)};
+  auto function_type = FunctionType::get(ctx, args, rets);
+
+  auto function_name = llvm::formatv("cudnn.execute.{0}", num_args);
   return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
                  function_type);
 }
@@ -223,6 +258,62 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// cudnn.call
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      cudnn::CallOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+
+    ModuleOp module = op->getParentOfType<ModuleOp>();
+
+    // Find the graph builder from the callee graph name.
+    auto builder = api->symTable(module).lookup<func::FuncOp>(
+        StringAttr::get(ctx, op.getCallee() + ".builder"));
+    if (!builder)
+      return rewriter.notifyMatchFailure(op, "graph builder was not found");
+
+    // Call a builder function to get an operation graph.
+    auto operationGraph = b.create<func::CallOp>(
+        builder.getSymName(), OperationGraphType::get(ctx), ValueRange());
+
+    // Build an executable from the operation graph.
+    auto executableCreate = api->getExecutableCreateFunction(rewriter, module);
+    auto executable = b.create<func::CallOp>(executableCreate.getSymName(),
+                                             ExecutableType::get(ctx),
+                                             operationGraph.getResult(0));
+
+    auto bufferView = IREE::HAL::BufferViewType::get(ctx);
+
+    // Export all tensor arguments to HAL buffer views.
+    SmallVector<Value> args = {executable->getResult(0)};
+    for (auto [index, arg] : llvm::enumerate(op.getArguments())) {
+      auto name = llvm::formatv("{0}.arg.{1}", op.getCallee(), index);
+      args.push_back(b.create<IREE::HAL::TensorExportOp>(
+          bufferView, arg, StringAttr::get(ctx, name)));
+    }
+
+    // Call execute function with executable and buffer arguments.
+    auto execute =
+        api->getExecuteFunction(rewriter, module, op->getNumOperands());
+    auto executed =
+        b.create<func::CallOp>(execute.getSymName(), bufferView, args);
+
+    // Import HAL buffers view back as tensors.
+    rewriter.replaceOpWithNewOp<IREE::HAL::TensorImportOp>(
+        op, op->getResult(0).getType(), executed->getResult(0),
+        StringAttr::get(ctx, op.getCallee() + ".result"));
+
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // cudnn.return
 //===----------------------------------------------------------------------===//
 
@@ -270,17 +361,16 @@ struct ConvertCudnnConvolutionOp
         args.push_back(b.create<arith::ConstantIntOp>(value, 64));
     };
 
-    push_back(op.getSpatialDimCount());
     push_back(op.getSpatialStride());
     push_back(op.getPrePadding());
     push_back(op.getPostPadding());
     push_back(op.getDilation());
 
     // Replace convolution operation with a convolution API call.
-    auto createConvolution = api->getConvolutionFunction(
+    auto convolution = api->getConvolutionFunction(
         rewriter, op->getParentOfType<ModuleOp>(), op.getSpatialDimCount());
-    rewriter.replaceOpWithNewOp<func::CallOp>(
-        op, createConvolution.getSymName(), TensorType::get(ctx), args);
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, convolution.getSymName(),
+                                              TensorType::get(ctx), args);
 
     return success();
   }
@@ -294,6 +384,7 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   auto api = std::make_shared<CudnnAPI>();
   patterns.insert<ConvertCudnnGraphOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnReturnOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnCallOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnConvolutionOp>(typeConverter, ctx, api);
 }
 

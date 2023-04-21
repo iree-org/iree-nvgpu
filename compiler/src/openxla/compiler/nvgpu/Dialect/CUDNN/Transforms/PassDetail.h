@@ -7,6 +7,9 @@
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSDETAIL_H_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSDETAIL_H_
 
+#include <compiler/src/iree/compiler/Dialect/HAL/IR/HALDialect.h>
+
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"

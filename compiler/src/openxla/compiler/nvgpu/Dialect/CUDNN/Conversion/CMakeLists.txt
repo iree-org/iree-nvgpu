@@ -24,6 +24,7 @@ iree_cc_library(
     MLIRPass
     MLIRTransforms
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
+    iree::compiler::Dialect::HAL::IR
   PUBLIC
 )
 

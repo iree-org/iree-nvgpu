@@ -124,7 +124,7 @@ class CuDNNOperationGraph : public iree::vm::RefObject<CuDNNOperationGraph> {
 
   std::vector<iree::vm::ref<CuDNNTensor>> args_;
   std::vector<iree::vm::ref<CuDNNTensor>> rets_;
-  
+
   // Ids of tensors in `args_` and `rets_`.
   std::vector<int64_t> uids_;
 };
@@ -165,7 +165,7 @@ class CuDNNExecutable : public iree::vm::RefObject<CuDNNExecutable> {
 //===----------------------------------------------------------------------===//
 
 // Creates a tensor placeholder for cuDNN graph argument.
-iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateArgument(
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateTensor(
     openxla_cudnn_dynamic_symbols_t* syms, iree::span<const int64_t> dims,
     iree::span<const int64_t> strides, int64_t uid, cudnnDataType_t dtype,
     int64_t alignment);
@@ -173,12 +173,24 @@ iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateArgument(
 // Creates a pointwise relu operation.
 iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseRelu(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    double lower_clip, double upper_clip, int64_t uid, int64_t alignment);
+    double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
+    bool is_virtual);
+
+// Creates a pointwise add operation.
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateAdd(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, float alpha,
+    CuDNNTensor& b, float alpha2, int64_t uid, int64_t alignment,
+    bool is_virtual);
+
+// Creates a pointwise bias operation.
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateBias(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, CuDNNTensor& b,
+    int64_t uid, int64_t alignment, bool is_virtual);
 
 // Creates a forward convolution operation.
 iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment);
+    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual);
 
 // Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(

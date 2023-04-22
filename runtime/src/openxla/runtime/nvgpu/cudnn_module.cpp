@@ -119,7 +119,18 @@ class CuDNNModuleState {
   StatusOr<vm::ref<CuDNNTensor>> PointwiseRelu(const vm::ref<CuDNNTensor> input,
                                                float lower_clip,
                                                float upper_clip, int64_t uid,
-                                               int64_t alignment);
+                                               int64_t alignment,
+                                               int32_t is_virtual);
+
+  // Creates an add operation and returns a result tensor.
+  StatusOr<vm::ref<CuDNNTensor>> Add(const vm::ref<CuDNNTensor> x, float alpha,
+                                     const vm::ref<CuDNNTensor> b, float alpha2,
+                                     int32_t is_virtual);
+
+  // Creates a bias operation and returns a result tensor.
+  StatusOr<vm::ref<CuDNNTensor>> Bias(const vm::ref<CuDNNTensor> x,
+                                      const vm::ref<CuDNNTensor> b,
+                                      int32_t is_virtual);
 
   // Creates a convolution operation and returns result tensor.
   template <size_t spatial_dims>
@@ -128,7 +139,7 @@ class CuDNNModuleState {
       std::array<int64_t, spatial_dims> stride,
       std::array<int64_t, spatial_dims> pre_padding,
       std::array<int64_t, spatial_dims> post_padding,
-      std::array<int64_t, spatial_dims> dilation);
+      std::array<int64_t, spatial_dims> dilation, int32_t is_virtual);
 
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
@@ -181,8 +192,8 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::TensorCreate(
     int64_t dtype, std::array<int64_t, rank> dimensions) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
   std::array<int64_t, rank> strides = Layout::strides(dimensions);
-  return CreateArgument(&syms_, dimensions, strides, uid++, data_type,
-                        kAlignment);
+  return CreateTensor(&syms_, dimensions, strides, uid++, data_type,
+                      kAlignment);
 }
 
 Status CuDNNModuleState::PrintTensorDebug(const vm::ref<CuDNNTensor> tensor) {
@@ -200,9 +211,22 @@ Status CuDNNModuleState::PrintGraphDebug(
 
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
     const vm::ref<CuDNNTensor> input, float lower_clip, float upper_clip,
-    int64_t uid, int64_t alignment) {
+    int64_t uid, int64_t alignment, int32_t is_virtual) {
   return CreatePointwiseRelu(&syms_, *input, lower_clip, upper_clip, uid,
-                             alignment);
+                             alignment, is_virtual);
+}
+
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Add(
+    const vm::ref<CuDNNTensor> x, float alpha, const vm::ref<CuDNNTensor> b,
+    float alpha2, int32_t is_virtual) {
+  return CreateAdd(&syms_, *x, alpha, *b, alpha2, uid++, kAlignment,
+                   is_virtual);
+}
+
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Bias(
+    const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> b,
+    int32_t is_virtual) {
+  return CreateBias(&syms_, *x, *b, uid++, kAlignment, is_virtual);
 }
 
 template <size_t spatial_dims>
@@ -211,8 +235,8 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
     std::array<int64_t, spatial_dims> stride,
     std::array<int64_t, spatial_dims> pre_padding,
     std::array<int64_t, spatial_dims> post_padding,
-    std::array<int64_t, spatial_dims> dilation) {
-  return CreateConvolution(&syms_, *x, *w, uid++, kAlignment);
+    std::array<int64_t, spatial_dims> dilation, int32_t is_virtual) {
+  return CreateConvolution(&syms_, *x, *w, uid++, kAlignment, is_virtual);
 }
 
 StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(
@@ -311,8 +335,11 @@ static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
 
     // Execute cuDNN executable with buffer inputs
     MakeNativeFunction("execute.2", &State::Execute<2>),
+    MakeNativeFunction("execute.4", &State::Execute<4>),
 
     // cuDNN operations
+    MakeNativeFunction("add", &State::Add),
+    MakeNativeFunction("bias", &State::Bias),
     MakeNativeFunction("pointwise_relu", &State::PointwiseRelu),
     MakeNativeFunction("convolution.2d", &State::Convolution<2>),
 

@@ -163,7 +163,7 @@ class CuDNNModuleState {
   cudnnHandle_t handle_;
 
   // We use automatic uid assignment for all cuDNN tensors in the graph.
-  uint64_t uid = 0;
+  uint64_t uid_ = 0;
 };
 
 CuDNNModuleState::CuDNNModuleState(iree_hal_device_t* device,
@@ -192,7 +192,7 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::TensorCreate(
     int64_t dtype, std::array<int64_t, rank> dimensions) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
   std::array<int64_t, rank> strides = Layout::strides(dimensions);
-  return CreateTensor(&syms_, dimensions, strides, uid++, data_type,
+  return CreateTensor(&syms_, dimensions, strides, uid_++, data_type,
                       kAlignment);
 }
 
@@ -219,14 +219,14 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Add(
     const vm::ref<CuDNNTensor> x, float alpha, const vm::ref<CuDNNTensor> b,
     float alpha2, int32_t is_virtual) {
-  return CreateAdd(&syms_, *x, alpha, *b, alpha2, uid++, kAlignment,
+  return CreateAdd(&syms_, *x, alpha, *b, alpha2, uid_++, kAlignment,
                    is_virtual);
 }
 
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Bias(
     const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> b,
     int32_t is_virtual) {
-  return CreateBias(&syms_, *x, *b, uid++, kAlignment, is_virtual);
+  return CreateBias(&syms_, *x, *b, uid_++, kAlignment, is_virtual);
 }
 
 template <size_t spatial_dims>
@@ -236,7 +236,7 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
     std::array<int64_t, spatial_dims> pre_padding,
     std::array<int64_t, spatial_dims> post_padding,
     std::array<int64_t, spatial_dims> dilation, int32_t is_virtual) {
-  return CreateConvolution(&syms_, *x, *w, uid++, kAlignment, is_virtual);
+  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual);
 }
 
 StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(

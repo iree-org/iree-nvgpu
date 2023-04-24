@@ -258,16 +258,16 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
 }
 
 //===----------------------------------------------------------------------===//
-// CreateAdd
+// CreatePointwiseUnary
 //===----------------------------------------------------------------------===//
 
-StatusOr<iree::vm::ref<CuDNNTensor>> CreateAdd(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, float alpha,
-    CuDNNTensor& b, float alpha2, int64_t uid, int64_t alignment,
+StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CuDNNTensor& x, float alpha, int64_t uid, int64_t alignment,
     bool is_virtual) {
   ScopedCuDNNStubs stubs(syms);
 
-  // Prepare tensor descriptor for add output.
+  // Prepare tensor descriptor for the output.
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
                                       .cloneFrom(x.tensor(), uid)
                                       .setAlignment(alignment)
@@ -275,40 +275,43 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreateAdd(
                                       .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
 
-  // Prepare an add operation descriptor.
-  cudnn_frontend::PointWiseDesc add = cudnn_frontend::PointWiseDescBuilder()
-                                          .setMode(CUDNN_POINTWISE_ADD)
-                                          .setMathPrecision(CUDNN_DATA_FLOAT)
-                                          .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, add.get_status()));
+  // Prepare an operation descriptor.
+  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
+                                           .setMode(mode)
+                                           .setMathPrecision(CUDNN_DATA_FLOAT)
+                                           .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
 
-  // Create a pointwise add operation.
+  // Create a pointwise operation.
   cudnn_frontend::Operation operation =
       cudnn_frontend::OperationBuilder(
           CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
           .setxDesc(x.tensor())
-          .setbDesc(b.tensor())
           .setyDesc(tensor)
-          .setpwDesc(add)
+          .setpwDesc(desc)
           .setAlpha(alpha)
-          .setAlpha2(alpha2)
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
   return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
-      syms, {&x, &b}, std::move(operation), std::move(tensor)));
+      syms, {&x}, std::move(operation), std::move(tensor)));
 }
 
 //===----------------------------------------------------------------------===//
-// CreateBias
+// CreatePointwiseBinary
 //===----------------------------------------------------------------------===//
 
-StatusOr<iree::vm::ref<CuDNNTensor>> CreateBias(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, CuDNNTensor& b,
-    int64_t uid, int64_t alignment, bool is_virtual) {
+StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CuDNNTensor& x, float alpha, CuDNNTensor& b, float alpha2, int64_t uid,
+    int64_t alignment, bool is_virtual) {
   ScopedCuDNNStubs stubs(syms);
 
-  // Prepare tensor descriptor for bias output.
+  // TODO(ezhulenev): Pointwise operations in cuDNN do implicit broadcasting, so
+  // in general it's unsafe to clone `x` for the output. We have to compute the
+  // broadcasted shape with correct strides corresponding to the layout.
+
+  // Prepare tensor descriptor for the output.
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
                                       .cloneFrom(x.tensor(), uid)
                                       .setAlignment(alignment)
@@ -316,21 +319,23 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreateBias(
                                       .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
 
-  // Prepare an bias operation descriptor.
-  cudnn_frontend::PointWiseDesc bias = cudnn_frontend::PointWiseDescBuilder()
-                                           .setMode(CUDNN_POINTWISE_ADD)
+  // Prepare an operation descriptor.
+  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
+                                           .setMode(mode)
                                            .setMathPrecision(CUDNN_DATA_FLOAT)
                                            .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, bias.get_status()));
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
 
-  // Create a pointwise bias operation.
+  // Create a pointwise operation.
   cudnn_frontend::Operation operation =
       cudnn_frontend::OperationBuilder(
           CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
           .setxDesc(x.tensor())
           .setbDesc(b.tensor())
           .setyDesc(tensor)
-          .setpwDesc(bias)
+          .setpwDesc(desc)
+          .setAlpha(alpha)
+          .setAlpha2(alpha2)
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
@@ -482,6 +487,10 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
       worklist.insert(worklist.end(), inputs.begin(), inputs.end());
     }
   }
+
+  // Reverse collected operations to construct an operation graph tag starting
+  // from the first compute operation in the graph.
+  std::reverse(ops.begin(), ops.end());
 
   // Construct a cudnn_frontend operation graph.
   auto graph = cudnn_frontend::OperationGraphBuilder()

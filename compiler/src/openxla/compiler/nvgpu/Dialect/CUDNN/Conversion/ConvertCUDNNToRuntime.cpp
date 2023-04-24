@@ -53,8 +53,13 @@ class CudnnAPI {
   func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
                                                ModuleOp module);
 
-  // Imports `@cudnn.add` into the module.
-  func::FuncOp getAddFunction(PatternRewriter &rewriter, ModuleOp module);
+  // Imports pointwise unary `@cudnn.{op}` into the module.
+  func::FuncOp getPointwiseUnaryFunction(PatternRewriter &rewriter,
+                                         ModuleOp module, std::string_view op);
+
+  // Imports pointwise binary `@cudnn.{op}` into the module.
+  func::FuncOp getPointwiseBinaryFunction(PatternRewriter &rewriter,
+                                          ModuleOp module, std::string_view op);
 
   // Imports `@cudnn.bias` into the module.
   func::FuncOp getBiasFunction(PatternRewriter &rewriter, ModuleOp module);
@@ -123,8 +128,25 @@ func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
   return addDecl(rewriter, module, function_name, function_type);
 }
 
-func::FuncOp CudnnAPI::getAddFunction(PatternRewriter &rewriter,
-                                      ModuleOp module) {
+func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
+                                                 ModuleOp module,
+                                                 std::string_view op) {
+  MLIRContext *ctx = module->getContext();
+  auto tensor = cudnn::TensorType::get(ctx);
+  auto f32 = Float32Type::get(ctx);
+  auto i32 = IntegerType::get(ctx, 32);
+
+  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*is_virtual=*/i32};
+  SmallVector<Type> rets = {/*y=*/tensor};
+  auto function_type = FunctionType::get(ctx, args, rets);
+
+  return addDecl(rewriter, module, StringAttr::get(ctx, Twine("cudnn.") + op),
+                 function_type);
+}
+
+func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
+                                                  ModuleOp module,
+                                                  std::string_view op) {
   MLIRContext *ctx = module->getContext();
   auto tensor = cudnn::TensorType::get(ctx);
   auto f32 = Float32Type::get(ctx);
@@ -135,7 +157,7 @@ func::FuncOp CudnnAPI::getAddFunction(PatternRewriter &rewriter,
   SmallVector<Type> rets = {/*y=*/tensor};
   auto function_type = FunctionType::get(ctx, args, rets);
 
-  return addDecl(rewriter, module, StringAttr::get(ctx, "cudnn.add"),
+  return addDecl(rewriter, module, StringAttr::get(ctx, Twine("cudnn.") + op),
                  function_type);
 }
 
@@ -389,14 +411,57 @@ struct ConvertCudnnReturnOp : public CudnnOpConversionPattern<cudnn::ReturnOp> {
 };
 
 //===----------------------------------------------------------------------===//
-// cudnn.add
+// cuDNN Pointwise Unary operations lowering
 //===----------------------------------------------------------------------===//
 
-struct ConvertCudnnAddOp : public CudnnOpConversionPattern<AddOp> {
-  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+template <typename T>
+struct ConvertCudnnUnaryOp : public CudnnOpConversionPattern<T> {
+  using CudnnOpConversionPattern<T>::CudnnOpConversionPattern;
+  using OpAdaptor = typename CudnnOpConversionPattern<T>::OpAdaptor;
 
   LogicalResult matchAndRewrite(
-      AddOp op, OpAdaptor adaptor,
+      T op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+
+    auto f32 = rewriter.getF32Type();
+
+    SmallVector<Value> args = {
+        adaptor.getX(),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f32),
+        b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
+    };
+
+    auto fn = this->api->getPointwiseUnaryFunction(
+        rewriter, op->template getParentOfType<ModuleOp>(),
+        op->getName().stripDialect());
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, fn.getSymName(),
+                                              TensorType::get(ctx), args);
+
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.sqrt
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnSqrtOp : public ConvertCudnnUnaryOp<SqrtOp> {
+  using ConvertCudnnUnaryOp::ConvertCudnnUnaryOp;
+};
+
+//===----------------------------------------------------------------------===//
+// cuDNN Pointwise Binary operations lowering
+//===----------------------------------------------------------------------===//
+
+template <typename T>
+struct ConvertCudnnBinaryOp : public CudnnOpConversionPattern<T> {
+  using CudnnOpConversionPattern<T>::CudnnOpConversionPattern;
+  using OpAdaptor = typename CudnnOpConversionPattern<T>::OpAdaptor;
+
+  LogicalResult matchAndRewrite(
+      T op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     MLIRContext *ctx = rewriter.getContext();
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
@@ -411,12 +476,46 @@ struct ConvertCudnnAddOp : public CudnnOpConversionPattern<AddOp> {
         b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
     };
 
-    auto add = api->getAddFunction(rewriter, op->getParentOfType<ModuleOp>());
-    rewriter.replaceOpWithNewOp<func::CallOp>(op, add.getSymName(),
+    auto fn = this->api->getPointwiseBinaryFunction(
+        rewriter, op->template getParentOfType<ModuleOp>(),
+        op->getName().stripDialect());
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, fn.getSymName(),
                                               TensorType::get(ctx), args);
 
     return success();
   }
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.add
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnAddOp : public ConvertCudnnBinaryOp<AddOp> {
+  using ConvertCudnnBinaryOp::ConvertCudnnBinaryOp;
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.div
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnDivOp : public ConvertCudnnBinaryOp<DivOp> {
+  using ConvertCudnnBinaryOp::ConvertCudnnBinaryOp;
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.mul
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnMulOp : public ConvertCudnnBinaryOp<MulOp> {
+  using ConvertCudnnBinaryOp::ConvertCudnnBinaryOp;
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.sub
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnSubOp : public ConvertCudnnBinaryOp<SubOp> {
+  using ConvertCudnnBinaryOp::ConvertCudnnBinaryOp;
 };
 
 //===----------------------------------------------------------------------===//
@@ -488,10 +587,32 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
                                     mlir::RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
   auto api = std::make_shared<CudnnAPI>();
+
+  //===--------------------------------------------------------------------===//
+  // High level cuDNN library integration operations
+  //===--------------------------------------------------------------------===//
+
   patterns.insert<ConvertCudnnGraphOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnReturnOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnCallOp>(typeConverter, ctx, api);
-  patterns.insert<ConvertCudnnAddOp>(typeConverter, ctx, api);
+
+  //===--------------------------------------------------------------------===//
+  // Pointwise Unary operations
+  //===--------------------------------------------------------------------===//
+
+  patterns.insert<ConvertCudnnSqrtOp>(typeConverter, ctx, api);
+
+  //===--------------------------------------------------------------------===//
+  // Pointwise Binary operations
+  //===--------------------------------------------------------------------===//
+
+  patterns.insert<ConvertCudnnAddOp, ConvertCudnnDivOp, ConvertCudnnMulOp,
+                  ConvertCudnnSubOp>(typeConverter, ctx, api);
+
+  //===--------------------------------------------------------------------===//
+  // The rest of cuDNN operations
+  //===--------------------------------------------------------------------===//
+
   patterns.insert<ConvertCudnnBiasOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnConvolutionOp>(typeConverter, ctx, api);
 }

@@ -370,6 +370,7 @@ static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
     MakeNativeFunction("execute.5", &State::Execute<5>),
     MakeNativeFunction("execute.6", &State::Execute<6>),
     MakeNativeFunction("execute.7", &State::Execute<7>),
+    MakeNativeFunction("execute.8", &State::Execute<8>),
 
     // cuDNN pointwise unary operations
     MakeNativeFunction("sqrt", &State::PointwiseUnary<CUDNN_POINTWISE_SQRT>),
@@ -378,6 +379,7 @@ static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
     MakeNativeFunction("add", &State::PointwiseBinary<CUDNN_POINTWISE_ADD>),
     MakeNativeFunction("div", &State::PointwiseBinary<CUDNN_POINTWISE_DIV>),
     MakeNativeFunction("sub", &State::PointwiseBinary<CUDNN_POINTWISE_SUB>),
+    MakeNativeFunction("max", &State::PointwiseBinary<CUDNN_POINTWISE_MAX>),
     MakeNativeFunction("mul", &State::PointwiseBinary<CUDNN_POINTWISE_MUL>),
 
     // cuDNN operations

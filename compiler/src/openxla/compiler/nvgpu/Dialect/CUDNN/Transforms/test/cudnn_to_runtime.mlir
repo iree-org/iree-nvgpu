@@ -108,6 +108,22 @@ cudnn.graph @div(%x: !cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32> {
 
 // -----
 
+cudnn.graph @max(%x: !cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32> {
+  %0 = cudnn.max(%x, %x) : (!cudnn.tensor<8x4x4xf32>, !cudnn.tensor<8x4x4xf32>)
+                         -> !cudnn.tensor<8x4x4xf32>
+  cudnn.return %0: !cudnn.tensor<8x4x4xf32>
+}
+
+// CHECK: func.func @max.builder() -> !cudnn.operation_graph {
+// CHECK:   %[[ALPHA:.*]] = arith.constant 1.000000e+00 : f32
+// CHECK:   %[[ALPHA2:.*]] = arith.constant 1.000000e+00 : f32
+// CHECK:   call @cudnn.max
+// CHECK: }
+
+// CHECK: @cudnn.max(!cudnn.tensor, f32, !cudnn.tensor, f32, i32) -> !cudnn.tensor
+
+// -----
+
 cudnn.graph @bias(
   %x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
   %b: !cudnn.tensor<1x32x1x1xf32, NHWC>

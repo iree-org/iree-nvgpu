@@ -197,6 +197,25 @@ cudnn.graph @div(
 
 // -----
 
+cudnn.graph @max(
+  %x: !cudnn.tensor<8x32x4x4xf32>,
+  %b: !cudnn.tensor<8x32x4x4xf32>
+) -> !cudnn.tensor<8x32x4x4xf32> {
+  %0 = cudnn.max(%x, %b) alpha=1.0 alpha2=1.0
+    : (!cudnn.tensor<8x32x4x4xf32>, !cudnn.tensor<8x32x4x4xf32>)
+    -> !cudnn.tensor<8x32x4x4xf32>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32>
+}
+
+// CHECK: cudnn.graph @max
+// CHECK: {
+// CHECK:   cudnn.max
+// CHECK:     alpha = 1.000000e+00
+// CHECK:     alpha2 = 1.000000e+00
+// CHECK: }
+
+// -----
+
 cudnn.graph @mul(
   %x: !cudnn.tensor<8x32x4x4xf32>,
   %b: !cudnn.tensor<8x32x4x4xf32>

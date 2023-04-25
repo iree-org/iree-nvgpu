@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <type_traits>
+#include <unordered_set>
 
 #include "openxla/runtime/nvgpu/cudnn_stub.h"
 
@@ -462,7 +463,7 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
   ScopedCuDNNStubs stubs(syms);
 
   // Tensors that should be passed as inputs when executing cuDNN graph.
-  std::vector<CuDNNTensor*> args;
+  std::unordered_set<CuDNNTensor*> args;
 
   // cuDNN operations defining the operation graph.
   std::vector<const cudnn_frontend::Operation*> ops;
@@ -478,7 +479,7 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 
     // Operation graph argument that must be passed as input.
     if (auto* arg = DynCast<CuDNNArgTensor>(tensor)) {
-      args.push_back(arg);
+      args.insert(arg);
     }
 
     // Add cudnn_frontend operation and follow inputs.
@@ -500,14 +501,16 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
                    .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, graph.get_status()));
 
-  // Sort arguments according by id, to get them in the same order as in
-  // `cudnn.graph` operation signature.
-  std::sort(args.begin(), args.end(), [](CuDNNTensor* a, CuDNNTensor* b) {
-    return a->tensor().getId() < b->tensor().getId();
-  });
+  // Sort arguments by id, to get them in the same order as in `cudnn.graph`
+  // operation signature.
+  std::vector<CuDNNTensor*> unique_args(args.begin(), args.end());
+  std::sort(unique_args.begin(), unique_args.end(),
+            [](CuDNNTensor* a, CuDNNTensor* b) {
+              return a->tensor().getId() < b->tensor().getId();
+            });
 
   return vm::ref<CuDNNOperationGraph>(
-      new CuDNNOperationGraph(syms, std::move(graph), args, rets));
+      new CuDNNOperationGraph(syms, std::move(graph), unique_args, rets));
 }
 
 //===----------------------------------------------------------------------===//

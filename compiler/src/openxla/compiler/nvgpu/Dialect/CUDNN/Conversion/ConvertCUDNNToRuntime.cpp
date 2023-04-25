@@ -504,6 +504,14 @@ struct ConvertCudnnDivOp : public ConvertCudnnBinaryOp<DivOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// cudnn.max
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnMaxOp : public ConvertCudnnBinaryOp<MaxOp> {
+  using ConvertCudnnBinaryOp::ConvertCudnnBinaryOp;
+};
+
+//===----------------------------------------------------------------------===//
 // cudnn.mul
 //===----------------------------------------------------------------------===//
 
@@ -610,8 +618,9 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   // Pointwise binary operations
   //===--------------------------------------------------------------------===//
 
-  patterns.insert<ConvertCudnnAddOp, ConvertCudnnDivOp, ConvertCudnnMulOp,
-                  ConvertCudnnSubOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnAddOp, ConvertCudnnDivOp, ConvertCudnnMaxOp,
+                  ConvertCudnnMulOp, ConvertCudnnSubOp>(typeConverter, ctx,
+                                                        api);
 
   //===--------------------------------------------------------------------===//
   // The rest of cuDNN operations

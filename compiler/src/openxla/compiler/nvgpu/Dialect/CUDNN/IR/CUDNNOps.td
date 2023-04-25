@@ -103,7 +103,7 @@ def CUDNN_ReductionOp : CUDNN_Op<"reduction", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
-// cuDNN Pointwise Unary operations
+// cuDNN pointwise unary operations
 //===----------------------------------------------------------------------===//
 
 class CUDNN_UnaryOp<string mnemonic, list<Trait> traits = []> :
@@ -129,7 +129,7 @@ def CUDNN_SqrtOp : CUDNN_UnaryOp<"sqrt"> {
 }
 
 //===----------------------------------------------------------------------===//
-// cuDNN Pointwise Binary operations
+// cuDNN pointwise binary operations
 //===----------------------------------------------------------------------===//
 
 class CUDNN_BinaryOp<string mnemonic, list<Trait> traits = []> :

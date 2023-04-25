@@ -601,13 +601,13 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   patterns.insert<ConvertCudnnCallOp>(typeConverter, ctx, api);
 
   //===--------------------------------------------------------------------===//
-  // Pointwise Unary operations
+  // Pointwise unary operations
   //===--------------------------------------------------------------------===//
 
   patterns.insert<ConvertCudnnSqrtOp>(typeConverter, ctx, api);
 
   //===--------------------------------------------------------------------===//
-  // Pointwise Binary operations
+  // Pointwise binary operations
   //===--------------------------------------------------------------------===//
 
   patterns.insert<ConvertCudnnAddOp, ConvertCudnnDivOp, ConvertCudnnMulOp,

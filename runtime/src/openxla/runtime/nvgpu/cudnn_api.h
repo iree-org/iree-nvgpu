@@ -191,7 +191,8 @@ iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
 // Creates a forward convolution operation.
 iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual);
+    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
+    cudnnConvolutionMode_t mode);
 
 // Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(

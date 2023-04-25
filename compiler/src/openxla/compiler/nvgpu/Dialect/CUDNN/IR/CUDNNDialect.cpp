@@ -7,13 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
+
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 
 using namespace mlir;
 using namespace openxla::compiler::nvgpu::cudnn;
 
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOpsDialect.cpp.inc"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
 // CUDNN dialect.
@@ -24,5 +25,6 @@ void CUDNNDialect::initialize() {
 #define GET_OP_LIST
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.cpp.inc"
       >();
+  registerAttrs();
   registerTypes();
 }

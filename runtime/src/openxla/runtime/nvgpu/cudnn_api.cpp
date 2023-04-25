@@ -278,7 +278,7 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
   // Prepare an operation descriptor.
   cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
                                            .setMode(mode)
-                                           .setMathPrecision(CUDNN_DATA_FLOAT)
+                                           .setComputeType(CUDNN_DATA_FLOAT)
                                            .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
 
@@ -322,7 +322,7 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
   // Prepare an operation descriptor.
   cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
                                            .setMode(mode)
-                                           .setMathPrecision(CUDNN_DATA_FLOAT)
+                                           .setComputeType(CUDNN_DATA_FLOAT)
                                            .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
 
@@ -366,7 +366,8 @@ static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t padding,
 
 StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual) {
+    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
+    cudnnConvolutionMode_t mode) {
   ScopedCuDNNStubs stubs(syms);
 
   span<const int64_t> input_dims(input->getDim(), input->getDimCount());
@@ -420,7 +421,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
   cudnn_frontend::ConvDesc convolution =
       cudnn_frontend::ConvDescBuilder()
           .setComputeType(CUDNN_DATA_FLOAT)
-          .setMathMode(CUDNN_CONVOLUTION)
+          .setMathMode(mode)
           .setSpatialDimCount(kSpatialDims)
           .setSpatialStride(kSpatialDims, strides.data())
           .setPrePadding(kSpatialDims, paddings.data())

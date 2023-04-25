@@ -148,7 +148,8 @@ class CuDNNModuleState {
       std::array<int64_t, spatial_dims> stride,
       std::array<int64_t, spatial_dims> pre_padding,
       std::array<int64_t, spatial_dims> post_padding,
-      std::array<int64_t, spatial_dims> dilation, int32_t is_virtual);
+      std::array<int64_t, spatial_dims> dilation, int32_t is_virtual,
+      int32_t mode);
 
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
@@ -191,9 +192,15 @@ CuDNNModuleState::~CuDNNModuleState() {
 }
 
 static StatusOr<cudnnDataType_t> ToCudnnDataType(int64_t dtype) {
-  if (dtype < CUDNN_DATA_FLOAT || dtype > CUDNN_DATA_FAST_FLOAT_FOR_FP8)
+  if (dtype < CUDNN_DATA_FLOAT || dtype > CUDNN_DATA_BOOLEAN)
     return Status(StatusCode::kInvalidArgument, "unsupported data type");
   return static_cast<cudnnDataType_t>(dtype);
+}
+
+static StatusOr<cudnnConvolutionMode_t> ToCudnnConvolutionMode(int32_t mode) {
+  if (mode < CUDNN_CONVOLUTION || mode > CUDNN_CROSS_CORRELATION)
+    return Status(StatusCode::kInvalidArgument, "unsupported convolution mode");
+  return static_cast<cudnnConvolutionMode_t>(mode);
 }
 
 template <size_t rank, typename Layout>
@@ -253,8 +260,12 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
     std::array<int64_t, spatial_dims> stride,
     std::array<int64_t, spatial_dims> pre_padding,
     std::array<int64_t, spatial_dims> post_padding,
-    std::array<int64_t, spatial_dims> dilation, int32_t is_virtual) {
-  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual);
+    std::array<int64_t, spatial_dims> dilation, int32_t is_virtual,
+    int32_t mode) {
+  IREE_ASSIGN_OR_RETURN(cudnnConvolutionMode_t conv_mode,
+                        ToCudnnConvolutionMode(mode));
+  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual,
+                           conv_mode);
 }
 
 StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(

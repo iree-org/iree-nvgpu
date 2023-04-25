@@ -152,15 +152,16 @@ cudnn.graph @convolution(
 // CHECK:   %[[X:.*]] = call @cudnn.tensor.create.4d.nhwc
 // CHECK:   %[[W:.*]] = call @cudnn.tensor.create.4d.nhwc
 // CHECK:   %[[VIRTUAL:.*]] = arith.constant 0 : i32
+// CHECK:   %[[MODE:.*]] = arith.constant 1 : i32
 // CHECK:   %[[Y:.*]] = call @cudnn.convolution.2d(%[[X]], %[[W]],
-// CHECK:                                         %[[VIRTUAL]])
+// CHECK:                                         %[[VIRTUAL]], %[[MODE]])
 // CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[Y]])
 // CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
 // CHECK: }
 
 // CHECK: @cudnn.tensor.create.4d.nhwc(i64, i64, i64, i64, i64) -> !cudnn.tensor
 // CHECK: @cudnn.convolution.2d(!cudnn.tensor, !cudnn.tensor, i64, i64, i64,
-// CHECK-SAME:                  i64, i64, i64, i64, i64, i32) -> !cudnn.tensor
+// CHECK-SAME:                  i64, i64, i64, i64, i64, i32, i32)
 // CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
 
 // -----

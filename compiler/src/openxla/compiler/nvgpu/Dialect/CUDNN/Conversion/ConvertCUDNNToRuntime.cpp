@@ -189,6 +189,7 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
   args.append(spatial_dims, /*post_patting=*/i64);
   args.append(spatial_dims, /*dilation=*/i64);
   args.append(1, /*is_virtual=*/i32);
+  args.append(1, /*mode=*/i32);
 
   SmallVector<Type> rets = {/*y=*/tensor};
   auto function_type = FunctionType::get(ctx, args, rets);
@@ -559,6 +560,8 @@ struct ConvertCudnnConvolutionOp
     MLIRContext *ctx = rewriter.getContext();
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
 
+    int32_t mode = static_cast<int32_t>(op.getMode());
+
     // Prepare arguments for convolution API call.
     SmallVector<Value> args(adaptor.getOperands());
     auto push_back = [&](llvm::ArrayRef<int64_t> values) {
@@ -570,6 +573,7 @@ struct ConvertCudnnConvolutionOp
     push_back(op.getPostPadding());
     push_back(op.getDilation());
     args.push_back(b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32));
+    args.push_back(b.create<arith::ConstantIntOp>(mode, 32));
 
     // Replace convolution operation with a convolution API call.
     auto convolution = api->getConvolutionFunction(

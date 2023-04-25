@@ -217,7 +217,9 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
       DenseI64ArrayAttr:$spatial_stride,
       DenseI64ArrayAttr:$pre_padding,
       DenseI64ArrayAttr:$post_padding,
-      DenseI64ArrayAttr:$dilation
+      DenseI64ArrayAttr:$dilation,
+      DefaultValuedAttr<CUDNN_ConvolutionModeAttr,
+        "ConvolutionMode::CROSS_CORRELATION">:$mode
     );
 
     let results = (outs CUDNN_TensorType:$y);
@@ -231,6 +233,7 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
          `pre_padding` `=` $pre_padding
          `post_padding` `=` $post_padding
          `dilation` `=` $dilation
+         (`mode` `=` $mode^)?
          attr-dict `:`
          functional-type(operands, results)
     }];

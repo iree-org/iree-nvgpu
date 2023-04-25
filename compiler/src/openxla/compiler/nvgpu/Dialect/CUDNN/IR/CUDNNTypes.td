@@ -82,7 +82,7 @@ def CUDNN_DATATYPE_BFLOAT16 : I32EnumAttrCase<"BFLOAT16", 9>;
 def CUDNN_DATATYPE_INT64    : I32EnumAttrCase<"INT64", 10>;
 def CUDNN_DATATYPE_BOOLEAN  : I32EnumAttrCase<"BOOLEAN", 11>;
 
-def CUDNN_DATATYPE : I32EnumAttr<"DataType",
+def CUDNN_DataType : I32EnumAttr<"DataType",
     "cuDNN data type",
     [
       CUDNN_DATATYPE_FLOAT,
@@ -101,6 +101,26 @@ def CUDNN_DATATYPE : I32EnumAttr<"DataType",
   let genSpecializedAttr = 0;
   let cppNamespace = "::openxla::compiler::nvgpu::cudnn";
 }
+
+//===----------------------------------------------------------------------===//
+// cuDNN convolution mode corresponding to cudnnConvolutionMode_t
+//===----------------------------------------------------------------------===//
+
+def CUDNN_CONVOLUTION         : I32EnumAttrCase<"CONVOLUTION", 0>;
+def CUDNN_CROSS_CORRELATION   : I32EnumAttrCase<"CROSS_CORRELATION", 1>;
+
+def CUDNN_ConvolutionMode : I32EnumAttr<"ConvolutionMode",
+    "cuDNN convolution mode",
+    [
+      CUDNN_CONVOLUTION,
+      CUDNN_CROSS_CORRELATION
+    ]> {
+  let genSpecializedAttr = 0;
+  let cppNamespace = "::openxla::compiler::nvgpu::cudnn";
+}
+
+def CUDNN_ConvolutionModeAttr
+    : EnumAttr<CUDNN_Dialect, CUDNN_ConvolutionMode, "convolution_mode">;
 
 //===----------------------------------------------------------------------===//
 // cuDNN data layout formats

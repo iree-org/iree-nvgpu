@@ -53,11 +53,11 @@ cudnn.graph @conv2d(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
 
 util.global @x : tensor<8x4x4x32xf32> = dense<1.0> : tensor<8x4x4x32xf32>
 util.global @w : tensor<32x1x1x32xf32> = dense<1.0> : tensor<32x1x1x32xf32>
-util.global @scale : tensor<1x1x1x32xf32> = dense<2.0> : tensor<1x1x1x32xf32>
-util.global @offset : tensor<1x1x1x32xf32> = dense<2.0> : tensor<1x1x1x32xf32>
-util.global @mean : tensor<1x1x1x32xf32> = dense<2.0> : tensor<1x1x1x32xf32>
-util.global @variance : tensor<1x1x1x32xf32> = dense<2.0> : tensor<1x1x1x32xf32>
-util.global @epsilon : tensor<1x1x1x1xf32> = dense<2.0> : tensor<1x1x1x1xf32>
+util.global @scale : tensor<1x1x1x32xf32> = dense<0.5> : tensor<1x1x1x32xf32>
+util.global @offset : tensor<1x1x1x32xf32> = dense<1.0> : tensor<1x1x1x32xf32>
+util.global @mean : tensor<1x1x1x32xf32> = dense<0.25> : tensor<1x1x1x32xf32>
+util.global @variance : tensor<1x1x1x32xf32> = dense<0.2> : tensor<1x1x1x32xf32>
+util.global @epsilon : tensor<1x1x1x1xf32> = dense<0.0001> : tensor<1x1x1x1xf32>
 
 func.func @main() -> tensor<8x4x4x32xf32> {
   %x = util.global.load @x : tensor<8x4x4x32xf32>

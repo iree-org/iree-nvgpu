@@ -29,6 +29,7 @@ iree_cc_library(
     "CUDNNOps.cpp"
     "CUDNNTypes.cpp"
   DEPS
+    ::CUDNNAttrsGen
     ::CUDNNEnumsGen
     ::CUDNNOpsGen
     ::CUDNNTypesGen
@@ -45,8 +46,8 @@ iree_tablegen_library(
   TD_FILE
     "CUDNNOps.td"
   OUTS
-    --gen-dialect-decls CUDNNOpsDialect.h.inc
-    --gen-dialect-defs CUDNNOpsDialect.cpp.inc
+    --gen-dialect-decls CUDNNDialect.h.inc
+    --gen-dialect-defs CUDNNDialect.cpp.inc
     --gen-op-decls CUDNNOps.h.inc
     --gen-op-defs CUDNNOps.cpp.inc
 )
@@ -69,6 +70,16 @@ iree_tablegen_library(
   OUTS
     --gen-enum-decls CUDNNEnums.h.inc
     --gen-enum-defs CUDNNEnums.cpp.inc
+)
+
+iree_tablegen_library(
+  NAME
+    CUDNNAttrsGen
+  TD_FILE
+    "CUDNNTypes.td"
+  OUTS
+    --gen-attrdef-decls CUDNNAttrs.h.inc
+    --gen-attrdef-defs CUDNNAttrs.cpp.inc
 )
 
 ### BAZEL_TO_CMAKE_PRESERVES_ALL_CONTENT_BELOW_THIS_LINE ###

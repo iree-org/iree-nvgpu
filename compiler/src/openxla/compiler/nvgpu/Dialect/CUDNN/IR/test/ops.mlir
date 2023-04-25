@@ -45,11 +45,11 @@ cudnn.graph @convolution(
   %filter: !cudnn.tensor<32x32x1x1xf32, NHWC>
 ) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
   %0 = cudnn.convolution(%image, %filter) alpha=1.0 beta=0.0
-         spatial_dim_count=2
-         spatial_stride=[1,1]
-         pre_padding=[1,1]
-         post_padding=[1,1]
-         dilation=[1,1]
+         spatial_dim_count = 2
+         spatial_stride = [1,1]
+         pre_padding = [1,1]
+         post_padding = [1,1]
+         dilation = [1,1]
     : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<32x32x1x1xf32, NHWC>)
     -> !cudnn.tensor<8x32x4x4xf32, NHWC>
   cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
@@ -65,6 +65,30 @@ cudnn.graph @convolution(
 // CHECK:     pre_padding = [1, 1]
 // CHECK:     post_padding = [1, 1]
 // CHECK:     dilation = [1, 1]
+// CHECK: }
+
+// -----
+
+cudnn.graph @convolution(
+  %image: !cudnn.tensor<8x32x4x4xf32, NHWC>,
+  %filter: !cudnn.tensor<32x32x1x1xf32, NHWC>
+) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
+  %0 = cudnn.convolution(%image, %filter) alpha=1.0 beta=0.0
+         spatial_dim_count = 2
+         spatial_stride = [1,1]
+         pre_padding = [1,1]
+         post_padding = [1,1]
+         dilation = [1,1]
+         mode = CONVOLUTION
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<32x32x1x1xf32, NHWC>)
+    -> !cudnn.tensor<8x32x4x4xf32, NHWC>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
+}
+
+// CHECK: cudnn.graph @convolution
+// CHECK: {
+// CHECK:   cudnn.convolution
+// CHECK:     mode = CONVOLUTION
 // CHECK: }
 
 // -----

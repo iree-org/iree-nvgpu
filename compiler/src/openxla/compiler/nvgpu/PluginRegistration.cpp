@@ -55,6 +55,7 @@ struct NvgpuSession : public PluginSession<NvgpuSession, NvgpuOptions> {
   }
 
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    pm.addPass(cudnn::createExpandCudnnOperationsPass());
     pm.addPass(cudnn::createConvertCudnnToRuntimePass());
   }
 };

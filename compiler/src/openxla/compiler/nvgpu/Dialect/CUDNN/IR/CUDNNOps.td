@@ -242,6 +242,31 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// cudnn.batch_norm_inference operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_BatchNormInferenceOp : CUDNN_Op<"batch_norm_inference", [Pure]> {
+    let summary = "Batch normalization in inference phase";
+
+    let arguments = (ins
+      CUDNN_TensorType:$x,
+      CUDNN_TensorType:$scale,
+      CUDNN_TensorType:$offset,
+      CUDNN_TensorType:$mean,
+      CUDNN_TensorType:$variance,
+      CUDNN_TensorType:$epsilon
+    );
+
+    let results = (outs CUDNN_TensorType:$y);
+
+    let assemblyFormat = [{
+      `(` $x `,` $scale `,` $offset `,` $mean `,` $variance `,` $epsilon`)`
+         attr-dict `:`
+         functional-type(operands, results)
+    }];
+}
+
+//===----------------------------------------------------------------------===//
 // cudnn.graph operation
 //===----------------------------------------------------------------------===//
 

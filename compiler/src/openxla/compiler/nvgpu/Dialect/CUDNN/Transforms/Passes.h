@@ -14,6 +14,13 @@
 namespace openxla::compiler::nvgpu::cudnn {
 
 //===----------------------------------------------------------------------===//
+// Transformations on cuDNN dialect
+//===----------------------------------------------------------------------===//
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createExpandCudnnOperationsPass();
+
+//===----------------------------------------------------------------------===//
 // Conversion from cuDNN dialect
 //===----------------------------------------------------------------------===//
 

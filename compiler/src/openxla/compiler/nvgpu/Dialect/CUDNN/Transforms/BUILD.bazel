@@ -47,6 +47,7 @@ cc_library(
     name = "Transforms",
     srcs = [
         "ConvertCUDNNToRuntime.cpp",
+        "ExpandCUDNNOperations.cpp",
     ],
     hdrs = ["Passes.h"],
     deps = [

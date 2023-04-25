@@ -19,23 +19,6 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// Pointwise operations
-// --------------------
-def CUDNN_PointWiseAddOp : CUDNN_Op<"pointwise_add", [Pure]> {
-    let summary = "Pointwise Add";
-
-    let arguments = (ins
-      CUDNN_TensorDescType:$input,
-      TypeAttr:$compute_type
-    );
-    let results = (outs CUDNN_TensorDescType:$res);
-
-    let assemblyFormat = [{
-      `(` $input `)` `type` `=` $compute_type
-        attr-dict `:` qualified(type($input)) `->` qualified(type($res))
-    }];
-}
-
 def CUDNN_PointWiseReluOp : CUDNN_Op<"pointwise_relu", [Pure]> {
     let summary = "Pointwise Relu";
 
@@ -119,48 +102,48 @@ def CUDNN_ReductionOp : CUDNN_Op<"reduction", [Pure]> {
     }];
 }
 
-// Utility functions.
-// ------------------
-def CUDNN_BuildGraphOp : CUDNN_Op<"build_graph", [Pure, Terminator] > {
-    let summary = "Build compute graph descriptor";
+//===----------------------------------------------------------------------===//
+// cudnn.add operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_AddOp : CUDNN_Op<"add", [Pure]> {
+    let summary = "Add";
 
     let arguments = (ins
-      Variadic<CUDNN_TensorDescType>:$graph_results
+      CUDNN_TensorType:$x,
+      CUDNN_TensorType:$b,
+      F32Attr:$alpha,
+      F32Attr:$alpha2
     );
+    let results = (outs CUDNN_TensorType:$y);
 
     let assemblyFormat = [{
-        `(` $graph_results `)` attr-dict `:` type($graph_results)
+      `(` $x `,` $b `)`
+         `alpha` `=` $alpha
+         `alpha2` `=` $alpha2
+          attr-dict `:`
+          functional-type(operands, results)
     }];
 }
 
-def CUDNN_BuildAndExecGraphOp : CUDNN_Op<"build_and_exec_graph", [Pure, IsolatedFromAbove]> {
-    let summary = "Build and exec graph";
+//===----------------------------------------------------------------------===//
+// cudnn.bias operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_BiasOp : CUDNN_Op<"bias", [Pure]> {
+    let summary = "Bias";
 
     let arguments = (ins
-      CUDNN_HandleType:$handle,
-      Variadic<RankedTensorOf<[AnyFloat]>>:$inputs
+      CUDNN_TensorType:$x,
+      CUDNN_TensorType:$b
     );
+    let results = (outs CUDNN_TensorType:$y);
 
-    let results = (outs
-      Variadic<RankedTensorOf<[AnyFloat]>>:$outputs
-    );
-
-    let regions = (region
-      SizedRegion<1>:$constructor
-    );
-
-     let assemblyFormat = [{
-      $handle `(` $inputs `)` attr-dict-with-keyword $constructor `:`
-        type($inputs) `->` type($outputs)
-     }];
- }
-
-def CUDNN_GetCurrentHandle : CUDNN_Op<"get_current_handle", [Pure]> {
-    let summary = "Get current handle";
-
-    let arguments = (ins);
-    let results = (outs CUDNN_HandleType:$handle);
-    let assemblyFormat = [{ attr-dict type($handle) }];
+    let assemblyFormat = [{
+      `(` $x `,` $b `)`
+          attr-dict `:`
+          functional-type(operands, results)
+    }];
 }
 
 //===----------------------------------------------------------------------===//

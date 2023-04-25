@@ -45,6 +45,59 @@ cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x4x32xi32, NHWC>)
 
 // -----
 
+cudnn.graph @add(
+  %x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
+  %b: !cudnn.tensor<8x32x4x4xf32, NHWC>
+) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
+  %0 = cudnn.add(%x, %b) alpha=1.0 alpha2=0.5
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<8x32x4x4xf32, NHWC>)
+    -> !cudnn.tensor<8x32x4x4xf32, NHWC>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
+}
+
+// CHECK: func.func @add.builder() -> !cudnn.operation_graph {
+// CHECK:   %[[X:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[B:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[ALPHA:.*]] = arith.constant 1.000000e+00 : f32
+// CHECK:   %[[ALPHA2:.*]] = arith.constant 5.000000e-01 : f32
+// CHECK:   %[[VIRTUAL:.*]] = arith.constant 0 : i32
+// CHECK:   %[[Y:.*]] = call @cudnn.add(%[[X]], %[[ALPHA]], %[[B]],
+// CHECK:                               %[[ALPHA2]], %[[VIRTUAL]])
+// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[Y]])
+// CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
+// CHECK: }
+
+// CHECK: @cudnn.tensor.create.4d.nhwc(i64, i64, i64, i64, i64) -> !cudnn.tensor
+// CHECK: @cudnn.add(!cudnn.tensor, f32, !cudnn.tensor, f32, i32) -> !cudnn.tensor
+// CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
+
+// -----
+
+cudnn.graph @bias(
+  %x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
+  %b: !cudnn.tensor<1x32x1x1xf32, NHWC>
+) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
+  %0 = cudnn.bias(%x, %b)
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<1x32x1x1xf32, NHWC>)
+    -> !cudnn.tensor<8x32x4x4xf32, NHWC>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
+}
+
+// CHECK: func.func @bias.builder() -> !cudnn.operation_graph {
+// CHECK:   %[[X:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[B:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[VIRTUAL:.*]] = arith.constant 0 : i32
+// CHECK:   %[[Y:.*]] = call @cudnn.bias(%[[X]], %[[B]], %[[VIRTUAL]])
+// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[Y]])
+// CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
+// CHECK: }
+
+// CHECK: @cudnn.tensor.create.4d.nhwc(i64, i64, i64, i64, i64) -> !cudnn.tensor
+// CHECK: @cudnn.bias(!cudnn.tensor, !cudnn.tensor, i32) -> !cudnn.tensor
+// CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
+
+// -----
+
 cudnn.graph @convolution(
   %image: !cudnn.tensor<8x32x4x4xf32, NHWC>,
   %filter: !cudnn.tensor<32x32x1x1xf32, NHWC>
@@ -63,14 +116,16 @@ cudnn.graph @convolution(
 // CHECK: func.func @convolution.builder() -> !cudnn.operation_graph {
 // CHECK:   %[[X:.*]] = call @cudnn.tensor.create.4d.nhwc
 // CHECK:   %[[W:.*]] = call @cudnn.tensor.create.4d.nhwc
+// CHECK:   %[[VIRTUAL:.*]] = arith.constant 0 : i32
 // CHECK:   %[[Y:.*]] = call @cudnn.convolution.2d(%[[X]], %[[W]],
+// CHECK:                                         %[[VIRTUAL]])
 // CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[Y]])
 // CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
 // CHECK: }
 
 // CHECK: @cudnn.tensor.create.4d.nhwc(i64, i64, i64, i64, i64) -> !cudnn.tensor
 // CHECK: @cudnn.convolution.2d(!cudnn.tensor, !cudnn.tensor, i64, i64, i64,
-// CHECK-SAME:                  i64, i64, i64, i64, i64) -> !cudnn.tensor
+// CHECK-SAME:                  i64, i64, i64, i64, i64, i32) -> !cudnn.tensor
 // CHECK: @cudnn.operation_graph.create(!cudnn.tensor) -> !cudnn.operation_graph
 
 // -----

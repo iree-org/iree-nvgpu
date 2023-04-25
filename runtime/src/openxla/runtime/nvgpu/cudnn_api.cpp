@@ -198,10 +198,10 @@ Status CuDNNExecutable::Execute(cudnnHandle_t handle,
 //===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
-// CreateArgument
+// CreateTensor
 //===----------------------------------------------------------------------===//
 
-StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
+StatusOr<vm::ref<CuDNNTensor>> CreateTensor(
     openxla_cudnn_dynamic_symbols_t* syms, span<const int64_t> dims,
     span<const int64_t> strides, int64_t uid, cudnnDataType_t dtype,
     int64_t alignment) {
@@ -223,13 +223,15 @@ StatusOr<vm::ref<CuDNNTensor>> CreateArgument(
 
 StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    double lower_clip, double upper_clip, int64_t uid, int64_t alignment) {
+    double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
+    bool is_virtual) {
   ScopedCuDNNStubs stubs(syms);
 
   // Prepare tensor descriptor for activation output.
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
                                       .cloneFrom(input.tensor(), uid)
                                       .setAlignment(alignment)
+                                      .setVirtual(is_virtual)
                                       .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
 
@@ -256,6 +258,87 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
 }
 
 //===----------------------------------------------------------------------===//
+// CreateAdd
+//===----------------------------------------------------------------------===//
+
+StatusOr<iree::vm::ref<CuDNNTensor>> CreateAdd(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, float alpha,
+    CuDNNTensor& b, float alpha2, int64_t uid, int64_t alignment,
+    bool is_virtual) {
+  ScopedCuDNNStubs stubs(syms);
+
+  // Prepare tensor descriptor for add output.
+  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
+                                      .cloneFrom(x.tensor(), uid)
+                                      .setAlignment(alignment)
+                                      .setVirtual(is_virtual)
+                                      .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
+
+  // Prepare an add operation descriptor.
+  cudnn_frontend::PointWiseDesc add = cudnn_frontend::PointWiseDescBuilder()
+                                          .setMode(CUDNN_POINTWISE_ADD)
+                                          .setMathPrecision(CUDNN_DATA_FLOAT)
+                                          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, add.get_status()));
+
+  // Create a pointwise add operation.
+  cudnn_frontend::Operation operation =
+      cudnn_frontend::OperationBuilder(
+          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
+          .setxDesc(x.tensor())
+          .setbDesc(b.tensor())
+          .setyDesc(tensor)
+          .setpwDesc(add)
+          .setAlpha(alpha)
+          .setAlpha2(alpha2)
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
+
+  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+      syms, {&x, &b}, std::move(operation), std::move(tensor)));
+}
+
+//===----------------------------------------------------------------------===//
+// CreateBias
+//===----------------------------------------------------------------------===//
+
+StatusOr<iree::vm::ref<CuDNNTensor>> CreateBias(
+    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, CuDNNTensor& b,
+    int64_t uid, int64_t alignment, bool is_virtual) {
+  ScopedCuDNNStubs stubs(syms);
+
+  // Prepare tensor descriptor for bias output.
+  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
+                                      .cloneFrom(x.tensor(), uid)
+                                      .setAlignment(alignment)
+                                      .setVirtual(is_virtual)
+                                      .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
+
+  // Prepare an bias operation descriptor.
+  cudnn_frontend::PointWiseDesc bias = cudnn_frontend::PointWiseDescBuilder()
+                                           .setMode(CUDNN_POINTWISE_ADD)
+                                           .setMathPrecision(CUDNN_DATA_FLOAT)
+                                           .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, bias.get_status()));
+
+  // Create a pointwise bias operation.
+  cudnn_frontend::Operation operation =
+      cudnn_frontend::OperationBuilder(
+          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
+          .setxDesc(x.tensor())
+          .setbDesc(b.tensor())
+          .setyDesc(tensor)
+          .setpwDesc(bias)
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
+
+  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+      syms, {&x, &b}, std::move(operation), std::move(tensor)));
+}
+
+//===----------------------------------------------------------------------===//
 // CreateConvolution
 //===----------------------------------------------------------------------===//
 
@@ -278,7 +361,7 @@ static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t padding,
 
 StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment) {
+    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual) {
   ScopedCuDNNStubs stubs(syms);
 
   span<const int64_t> input_dims(input->getDim(), input->getDimCount());
@@ -324,6 +407,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
           .setAlignment(alignment)
           .setDim(output_dims.size(), output_dims.data())
           .setStride(output_strides.size(), output_strides.data())
+          .setVirtual(is_virtual)
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
 
@@ -406,6 +490,12 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
                    .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, graph.get_status()));
 
+  // Sort arguments according by id, to get them in the same order as in
+  // `cudnn.graph` operation signature.
+  std::sort(args.begin(), args.end(), [](CuDNNTensor* a, CuDNNTensor* b) {
+    return a->tensor().getId() < b->tensor().getId();
+  });
+
   return vm::ref<CuDNNOperationGraph>(
       new CuDNNOperationGraph(syms, std::move(graph), args, rets));
 }
@@ -448,13 +538,16 @@ iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
             .setEngineConfig(config, graph.graph().getTag())
             .build();
 
-    // Skip engine configs that are not supported by the current cuDNN version.ß
-    if (plan.get_status() == CUDNN_STATUS_NOT_SUPPORTED) {
+    // Skip engine configs that are not supported by the current cuDNN version.
+    if (plan.get_status() != CUDNN_STATUS_SUCCESS) {
       continue;
     }
 
-    IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, plan.get_status()));
     plans.push_back(std::move(plan));
+
+    // TODO(ezhulenev): Currently we do not support any plan selection or auto
+    // tuning, so we stop once we find the first supported plan.
+    break;
   }
 
   // If we end up with empty execution plans, it means that current version of

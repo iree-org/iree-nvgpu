@@ -55,7 +55,8 @@ cudnn.graph @convolution(
   cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
 }
 
-// CHECK: cudnn.graph @convolution {{.*}} {
+// CHECK: cudnn.graph @convolution
+// CHECK: {
 // CHECK:   cudnn.convolution
 // CHECK:     alpha = 1.000000e+00
 // CHECK:     beta = 0.000000e+00
@@ -64,4 +65,40 @@ cudnn.graph @convolution(
 // CHECK:     pre_padding = [1, 1]
 // CHECK:     post_padding = [1, 1]
 // CHECK:     dilation = [1, 1]
+// CHECK: }
+
+// -----
+
+cudnn.graph @add(
+  %x: !cudnn.tensor<8x32x4x4xf32>,
+  %b: !cudnn.tensor<8x32x4x4xf32>
+) -> !cudnn.tensor<8x32x4x4xf32> {
+  %0 = cudnn.add(%x, %b) alpha=1.0 alpha2=1.0
+    : (!cudnn.tensor<8x32x4x4xf32>, !cudnn.tensor<8x32x4x4xf32>)
+    -> !cudnn.tensor<8x32x4x4xf32>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32>
+}
+
+// CHECK: cudnn.graph @add
+// CHECK: {
+// CHECK:   cudnn.add
+// CHECK:     alpha = 1.000000e+00
+// CHECK:     alpha2 = 1.000000e+00
+// CHECK: }
+
+// -----
+
+cudnn.graph @bias(
+  %x: !cudnn.tensor<8x32x4x4xf32>,
+  %b: !cudnn.tensor<1x32x1x1xf32>
+) -> !cudnn.tensor<8x32x4x4xf32> {
+  %0 = cudnn.bias(%x, %b)
+    : (!cudnn.tensor<8x32x4x4xf32>, !cudnn.tensor<1x32x1x1xf32>)
+    -> !cudnn.tensor<8x32x4x4xf32>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32>
+}
+
+// CHECK: cudnn.graph @bias
+// CHECK: {
+// CHECK:   cudnn.bias
 // CHECK: }

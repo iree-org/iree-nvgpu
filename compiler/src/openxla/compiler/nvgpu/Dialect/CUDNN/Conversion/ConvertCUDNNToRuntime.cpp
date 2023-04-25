@@ -25,6 +25,7 @@
 #include "mlir/IR/Location.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/SymbolTable.h"
+#include "mlir/IR/Value.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
@@ -51,6 +52,12 @@ class CudnnAPI {
   // Imports `@cudnn.operation_graph.create` into the module.
   func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
                                                ModuleOp module);
+
+  // Imports `@cudnn.add` into the module.
+  func::FuncOp getAddFunction(PatternRewriter &rewriter, ModuleOp module);
+
+  // Imports `@cudnn.bias` into the module.
+  func::FuncOp getBiasFunction(PatternRewriter &rewriter, ModuleOp module);
 
   // Imports `@cudnn.convolution` into the module.
   func::FuncOp getConvolutionFunction(PatternRewriter &rewriter,
@@ -116,15 +123,50 @@ func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
   return addDecl(rewriter, module, function_name, function_type);
 }
 
+func::FuncOp CudnnAPI::getAddFunction(PatternRewriter &rewriter,
+                                      ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  auto tensor = cudnn::TensorType::get(ctx);
+  auto f32 = Float32Type::get(ctx);
+  auto i32 = IntegerType::get(ctx, 32);
+
+  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*b=*/tensor,
+                            /*alpha2=*/f32, /*is_virtual=*/i32};
+  SmallVector<Type> rets = {/*y=*/tensor};
+  auto function_type = FunctionType::get(ctx, args, rets);
+
+  return addDecl(rewriter, module, StringAttr::get(ctx, "cudnn.add"),
+                 function_type);
+}
+
+func::FuncOp CudnnAPI::getBiasFunction(PatternRewriter &rewriter,
+                                       ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  auto tensor = cudnn::TensorType::get(ctx);
+  auto i32 = IntegerType::get(ctx, 32);
+
+  SmallVector<Type> args = {/*x=*/tensor, /*b=*/tensor, /*is_virtual=*/i32};
+  SmallVector<Type> rets = {/*y=*/tensor};
+  auto function_type = FunctionType::get(ctx, args, rets);
+
+  return addDecl(rewriter, module, StringAttr::get(ctx, "cudnn.bias"),
+                 function_type);
+}
+
 func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
                                               ModuleOp module,
                                               int64_t spatial_dims) {
   MLIRContext *ctx = module->getContext();
   auto tensor = cudnn::TensorType::get(ctx);
+  auto i32 = IntegerType::get(ctx, 32);
+  auto i64 = IntegerType::get(ctx, 64);
 
   SmallVector<Type> args = {/*x=*/tensor, /*w=*/tensor};
-  size_t num_i64_args = spatial_dims * 4;  // stride, padding x 2, dilation
-  args.resize(args.size() + num_i64_args, IntegerType::get(ctx, 64));
+  args.append(spatial_dims, /*stride=*/i64);
+  args.append(spatial_dims, /*pre_padding=*/i64);
+  args.append(spatial_dims, /*post_patting=*/i64);
+  args.append(spatial_dims, /*dilation=*/i64);
+  args.append(1, /*is_virtual=*/i32);
 
   SmallVector<Type> rets = {/*y=*/tensor};
   auto function_type = FunctionType::get(ctx, args, rets);
@@ -187,6 +229,12 @@ static FailureOr<DataType> getDataType(Type elementType) {
   if (elementType.isInteger(64)) return DataType::INT64;
   if (elementType.isUnsignedInteger(8)) return DataType::UINT8;
   return failure();
+}
+
+// Returns true if value is an intermediate cuDNN tensor (virtual tensor).
+static bool IsVirtual(TypedValue<cudnn::TensorType> tensor) {
+  return llvm::none_of(tensor.getUsers(),
+                       [](Operation *op) { return isa<cudnn::ReturnOp>(op); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -341,6 +389,64 @@ struct ConvertCudnnReturnOp : public CudnnOpConversionPattern<cudnn::ReturnOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// cudnn.add
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnAddOp : public CudnnOpConversionPattern<AddOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      AddOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+
+    auto f32 = rewriter.getF32Type();
+
+    SmallVector<Value> args = {
+        adaptor.getX(),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f32),
+        adaptor.getB(),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha2(), f32),
+        b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
+    };
+
+    auto add = api->getAddFunction(rewriter, op->getParentOfType<ModuleOp>());
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, add.getSymName(),
+                                              TensorType::get(ctx), args);
+
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
+// cudnn.bias
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnBiasOp : public CudnnOpConversionPattern<BiasOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      BiasOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+
+    SmallVector<Value> args = {
+        adaptor.getX(),
+        adaptor.getB(),
+        b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
+    };
+
+    auto bias = api->getBiasFunction(rewriter, op->getParentOfType<ModuleOp>());
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, bias.getSymName(),
+                                              TensorType::get(ctx), args);
+
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // cudnn.convolution
 //===----------------------------------------------------------------------===//
 
@@ -360,11 +466,11 @@ struct ConvertCudnnConvolutionOp
       for (int64_t value : values)
         args.push_back(b.create<arith::ConstantIntOp>(value, 64));
     };
-
     push_back(op.getSpatialStride());
     push_back(op.getPrePadding());
     push_back(op.getPostPadding());
     push_back(op.getDilation());
+    args.push_back(b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32));
 
     // Replace convolution operation with a convolution API call.
     auto convolution = api->getConvolutionFunction(
@@ -385,6 +491,8 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   patterns.insert<ConvertCudnnGraphOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnReturnOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnCallOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnAddOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnBiasOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnConvolutionOp>(typeConverter, ctx, api);
 }
 

@@ -93,6 +93,26 @@ cudnn.graph @convolution(
 
 // -----
 
+cudnn.graph @batch_norm_inference(
+  %x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
+  %vec: !cudnn.tensor<1x32x1x1xf32, NHWC>,
+  %scalar: !cudnn.tensor<1x1x1x1xf32, NHWC>
+) -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
+  %0 = cudnn.batch_norm_inference(%x, %vec, %vec, %vec, %vec, %scalar)
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<1x32x1x1xf32, NHWC>,
+       !cudnn.tensor<1x32x1x1xf32, NHWC>, !cudnn.tensor<1x32x1x1xf32, NHWC>,
+       !cudnn.tensor<1x32x1x1xf32, NHWC>, !cudnn.tensor<1x1x1x1xf32, NHWC>)
+    -> !cudnn.tensor<8x32x4x4xf32, NHWC>
+  cudnn.return %0: !cudnn.tensor<8x32x4x4xf32, NHWC>
+}
+
+// CHECK: cudnn.graph @batch_norm_inference
+// CHECK: {
+// CHECK:   cudnn.batch_norm_inference
+// CHECK: }
+
+// -----
+
 cudnn.graph @sqrt(%x: !cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32> {
   %0 = cudnn.sqrt(%x) : (!cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32>
   cudnn.return %0: !cudnn.tensor<8x4x4xf32>

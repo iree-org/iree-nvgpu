@@ -9,6 +9,29 @@ include "mlir/Pass/PassBase.td"
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_
 
+def ExpandCudnnOperations :
+    Pass<"openxla-nvgpu-expand-cudnn-operations", "mlir::ModuleOp"> {
+  let summary = "Expands cuDNN operations to primitive cuDNN operations";
+
+  let description = [{
+    Some cuDNN operations are not supported by the cuDNN runtime fusion engine,
+    however they can be expanded into a sequence of primitive operations, that
+    could be compiled by cuDNN at runtime.
+
+    For example batch normalization is not supported as a convolution epilogue,
+    however at inference phase it can be expanded into a sequence of pointwise
+    operations that can be fused into the preceeding convolution.
+  }];
+
+  let constructor = [{
+    ::openxla::compiler::nvgpu::cudnn::createExpandCudnnOperationsPass()
+  }];
+
+  let dependentDialects = [
+    "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
+  ];
+}
+
 def ConvertCudnnToRuntime :
     Pass<"openxla-nvgpu-convert-cudnn-to-runtime", "mlir::ModuleOp"> {
   let summary = "Converts cuDNN operations to cuDNN runtime calls";

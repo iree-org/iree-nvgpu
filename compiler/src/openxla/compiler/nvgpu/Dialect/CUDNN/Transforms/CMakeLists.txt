@@ -40,6 +40,7 @@ iree_cc_library(
     "Passes.h"
   SRCS
     "ConvertCUDNNToRuntime.cpp"
+    "ExpandCUDNNOperations.cpp"
   DEPS
     ::PassHeaders
     MLIRPass

@@ -41,8 +41,8 @@ cc_library(
         "CUDNNTypes.h",
     ],
     textual_hdrs = [
-        "CUDNNOpsDialect.h.inc",
-        "CUDNNOpsDialect.cpp.inc",
+        "CUDNNDialect.h.inc",
+        "CUDNNDialect.cpp.inc",
         "CUDNNOps.h.inc",
         "CUDNNOps.cpp.inc",
         "CUDNNTypes.h.inc",
@@ -111,6 +111,23 @@ iree_gentbl_cc_library(
         (
             ["--gen-enum-defs"],
             "CUDNNEnums.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUDNNTypes.td",
+    deps = [":td_files"],
+)
+
+iree_gentbl_cc_library(
+    name = "CUDNNAttrsGen",
+    tbl_outs = [
+        (
+            ["--gen-attrdef-decls"],
+            "CUDNNAttrs.h.inc",
+        ),
+        (
+            ["--gen-attrdef-defs"],
+            "CUDNNAttrs.cpp.inc",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",

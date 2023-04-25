@@ -176,21 +176,23 @@ iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseRelu(
     double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
     bool is_virtual);
 
-// Creates a pointwise add operation.
-iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateAdd(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, float alpha,
-    CuDNNTensor& b, float alpha2, int64_t uid, int64_t alignment,
+// Creates a pointwise unary operation.
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CuDNNTensor& x, float alpha, int64_t uid, int64_t alignment,
     bool is_virtual);
 
-// Creates a pointwise bias operation.
-iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateBias(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& x, CuDNNTensor& b,
-    int64_t uid, int64_t alignment, bool is_virtual);
+// Creates a pointwise binary operation.
+iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CuDNNTensor& x, float alpha, CuDNNTensor& b, float alpha2, int64_t uid,
+    int64_t alignment, bool is_virtual);
 
 // Creates a forward convolution operation.
 iree::StatusOr<iree::vm::ref<CuDNNTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual);
+    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
+    cudnnConvolutionMode_t mode);
 
 // Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CuDNNOperationGraph>> CreateOperationGraph(

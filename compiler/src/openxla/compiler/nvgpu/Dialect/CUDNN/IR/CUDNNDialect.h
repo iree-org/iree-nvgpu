@@ -10,7 +10,7 @@
 #define CUDNN_CUDNNDIALECT_H
 
 #include "mlir/IR/Dialect.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h.inc"
 
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOpsDialect.h.inc"
-
-#endif // CUDNN_CUDNNDIALECT_H
+#endif  // CUDNN_CUDNNDIALECT_H

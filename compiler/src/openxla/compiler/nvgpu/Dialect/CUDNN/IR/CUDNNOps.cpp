@@ -11,6 +11,7 @@
 #include <cstdint>
 
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/FunctionImplementation.h"
@@ -18,6 +19,9 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
+
+#define GET_ATTRDEF_CLASSES
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
 
 namespace openxla::compiler::nvgpu::cudnn {
 
@@ -169,6 +173,13 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
+}
+
+void CUDNNDialect::registerAttrs() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
+      >();
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

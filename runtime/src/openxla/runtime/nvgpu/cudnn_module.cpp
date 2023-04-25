@@ -122,10 +122,19 @@ class CuDNNModuleState {
                                                int64_t alignment,
                                                int32_t is_virtual);
 
-  // Creates an add operation and returns a result tensor.
-  StatusOr<vm::ref<CuDNNTensor>> Add(const vm::ref<CuDNNTensor> x, float alpha,
-                                     const vm::ref<CuDNNTensor> b, float alpha2,
-                                     int32_t is_virtual);
+  // Creates a pointwise unary operation and returns a result tensor.
+  template <cudnnPointwiseMode_t mode>
+  StatusOr<vm::ref<CuDNNTensor>> PointwiseUnary(const vm::ref<CuDNNTensor> x,
+                                                float alpha,
+                                                int32_t is_virtual);
+
+  // Creates a pointwise binary operation and returns a result tensor.
+  template <cudnnPointwiseMode_t mode>
+  StatusOr<vm::ref<CuDNNTensor>> PointwiseBinary(const vm::ref<CuDNNTensor> x,
+                                                 float alpha,
+                                                 const vm::ref<CuDNNTensor> b,
+                                                 float alpha2,
+                                                 int32_t is_virtual);
 
   // Creates a bias operation and returns a result tensor.
   StatusOr<vm::ref<CuDNNTensor>> Bias(const vm::ref<CuDNNTensor> x,
@@ -139,7 +148,8 @@ class CuDNNModuleState {
       std::array<int64_t, spatial_dims> stride,
       std::array<int64_t, spatial_dims> pre_padding,
       std::array<int64_t, spatial_dims> post_padding,
-      std::array<int64_t, spatial_dims> dilation, int32_t is_virtual);
+      std::array<int64_t, spatial_dims> dilation, int32_t is_virtual,
+      int32_t mode);
 
   // Prints tensor debug information to stderr.
   Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
@@ -182,9 +192,15 @@ CuDNNModuleState::~CuDNNModuleState() {
 }
 
 static StatusOr<cudnnDataType_t> ToCudnnDataType(int64_t dtype) {
-  if (dtype < CUDNN_DATA_FLOAT || dtype > CUDNN_DATA_FAST_FLOAT_FOR_FP8)
+  if (dtype < CUDNN_DATA_FLOAT || dtype > CUDNN_DATA_BOOLEAN)
     return Status(StatusCode::kInvalidArgument, "unsupported data type");
   return static_cast<cudnnDataType_t>(dtype);
+}
+
+static StatusOr<cudnnConvolutionMode_t> ToCudnnConvolutionMode(int32_t mode) {
+  if (mode < CUDNN_CONVOLUTION || mode > CUDNN_CROSS_CORRELATION)
+    return Status(StatusCode::kInvalidArgument, "unsupported convolution mode");
+  return static_cast<cudnnConvolutionMode_t>(mode);
 }
 
 template <size_t rank, typename Layout>
@@ -216,17 +232,26 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
                              alignment, is_virtual);
 }
 
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Add(
+template <cudnnPointwiseMode_t mode>
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseUnary(
+    const vm::ref<CuDNNTensor> x, float alpha, int32_t is_virtual) {
+  return CreatePointwiseUnary(&syms_, mode, *x, alpha, uid_++, kAlignment,
+                              is_virtual);
+}
+
+template <cudnnPointwiseMode_t mode>
+StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseBinary(
     const vm::ref<CuDNNTensor> x, float alpha, const vm::ref<CuDNNTensor> b,
     float alpha2, int32_t is_virtual) {
-  return CreateAdd(&syms_, *x, alpha, *b, alpha2, uid_++, kAlignment,
-                   is_virtual);
+  return CreatePointwiseBinary(&syms_, mode, *x, alpha, *b, alpha2, uid_++,
+                               kAlignment, is_virtual);
 }
 
 StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Bias(
     const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> b,
     int32_t is_virtual) {
-  return CreateBias(&syms_, *x, *b, uid_++, kAlignment, is_virtual);
+  return CreatePointwiseBinary(&syms_, CUDNN_POINTWISE_ADD, *x, 1.0, *b, 1.0,
+                               uid_++, kAlignment, is_virtual);
 }
 
 template <size_t spatial_dims>
@@ -235,8 +260,12 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
     std::array<int64_t, spatial_dims> stride,
     std::array<int64_t, spatial_dims> pre_padding,
     std::array<int64_t, spatial_dims> post_padding,
-    std::array<int64_t, spatial_dims> dilation, int32_t is_virtual) {
-  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual);
+    std::array<int64_t, spatial_dims> dilation, int32_t is_virtual,
+    int32_t mode) {
+  IREE_ASSIGN_OR_RETURN(cudnnConvolutionMode_t conv_mode,
+                        ToCudnnConvolutionMode(mode));
+  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual,
+                           conv_mode);
 }
 
 StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(
@@ -334,11 +363,24 @@ static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
     MakeNativeFunction("executable.create", &State::Executable),
 
     // Execute cuDNN executable with buffer inputs
+    MakeNativeFunction("execute.1", &State::Execute<1>),
     MakeNativeFunction("execute.2", &State::Execute<2>),
+    MakeNativeFunction("execute.3", &State::Execute<3>),
     MakeNativeFunction("execute.4", &State::Execute<4>),
+    MakeNativeFunction("execute.5", &State::Execute<5>),
+    MakeNativeFunction("execute.6", &State::Execute<6>),
+    MakeNativeFunction("execute.7", &State::Execute<7>),
+
+    // cuDNN pointwise unary operations
+    MakeNativeFunction("sqrt", &State::PointwiseUnary<CUDNN_POINTWISE_SQRT>),
+
+    // cuDNN pointwise binary operations
+    MakeNativeFunction("add", &State::PointwiseBinary<CUDNN_POINTWISE_ADD>),
+    MakeNativeFunction("div", &State::PointwiseBinary<CUDNN_POINTWISE_DIV>),
+    MakeNativeFunction("sub", &State::PointwiseBinary<CUDNN_POINTWISE_SUB>),
+    MakeNativeFunction("mul", &State::PointwiseBinary<CUDNN_POINTWISE_MUL>),
 
     // cuDNN operations
-    MakeNativeFunction("add", &State::Add),
     MakeNativeFunction("bias", &State::Bias),
     MakeNativeFunction("pointwise_relu", &State::PointwiseRelu),
     MakeNativeFunction("convolution.2d", &State::Convolution<2>),

@@ -103,27 +103,82 @@ def CUDNN_ReductionOp : CUDNN_Op<"reduction", [Pure]> {
 }
 
 //===----------------------------------------------------------------------===//
+// cuDNN pointwise unary operations
+//===----------------------------------------------------------------------===//
+
+class CUDNN_UnaryOp<string mnemonic, list<Trait> traits = []> :
+    CUDNN_Op<mnemonic, !listconcat([Pure], traits)>,
+    Arguments<(ins
+      CUDNN_TensorType:$x,
+      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha)>,
+    Results<(outs CUDNN_TensorType:$y)> {
+  let assemblyFormat = [{
+    `(` $x `)`
+      (`alpha` `=` $alpha^)?
+        attr-dict `:`
+        functional-type(operands, results)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.sqrt operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_SqrtOp : CUDNN_UnaryOp<"sqrt"> {
+  let summary = "Sqrt";
+}
+
+//===----------------------------------------------------------------------===//
+// cuDNN pointwise binary operations
+//===----------------------------------------------------------------------===//
+
+class CUDNN_BinaryOp<string mnemonic, list<Trait> traits = []> :
+    CUDNN_Op<mnemonic, !listconcat([Pure], traits)>,
+    Arguments<(ins
+      CUDNN_TensorType:$x,
+      CUDNN_TensorType:$b,
+      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha,
+      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha2)>,
+    Results<(outs CUDNN_TensorType:$y)> {
+  let assemblyFormat = [{
+    `(` $x `,` $b `)`
+      (`alpha` `=` $alpha^)?
+      (`alpha2` `=` $alpha2^)?
+        attr-dict `:`
+        functional-type(operands, results)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // cudnn.add operation
 //===----------------------------------------------------------------------===//
 
-def CUDNN_AddOp : CUDNN_Op<"add", [Pure]> {
-    let summary = "Add";
+def CUDNN_AddOp : CUDNN_BinaryOp<"add"> {
+  let summary = "Add";
+}
 
-    let arguments = (ins
-      CUDNN_TensorType:$x,
-      CUDNN_TensorType:$b,
-      F32Attr:$alpha,
-      F32Attr:$alpha2
-    );
-    let results = (outs CUDNN_TensorType:$y);
+//===----------------------------------------------------------------------===//
+// cudnn.div operation
+//===----------------------------------------------------------------------===//
 
-    let assemblyFormat = [{
-      `(` $x `,` $b `)`
-         `alpha` `=` $alpha
-         `alpha2` `=` $alpha2
-          attr-dict `:`
-          functional-type(operands, results)
-    }];
+def CUDNN_DivOp : CUDNN_BinaryOp<"div"> {
+  let summary = "Div";
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.mul operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_MulOp : CUDNN_BinaryOp<"mul"> {
+  let summary = "Mul";
+}
+
+//===----------------------------------------------------------------------===//
+// cudnn.sub operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_SubOp : CUDNN_BinaryOp<"sub"> {
+  let summary = "Sub";
 }
 
 //===----------------------------------------------------------------------===//
@@ -162,7 +217,9 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
       DenseI64ArrayAttr:$spatial_stride,
       DenseI64ArrayAttr:$pre_padding,
       DenseI64ArrayAttr:$post_padding,
-      DenseI64ArrayAttr:$dilation
+      DenseI64ArrayAttr:$dilation,
+      DefaultValuedAttr<CUDNN_ConvolutionModeAttr,
+        "ConvolutionMode::CROSS_CORRELATION">:$mode
     );
 
     let results = (outs CUDNN_TensorType:$y);
@@ -176,6 +233,7 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
          `pre_padding` `=` $pre_padding
          `post_padding` `=` $post_padding
          `dilation` `=` $dilation
+         (`mode` `=` $mode^)?
          attr-dict `:`
          functional-type(operands, results)
     }];

@@ -1,4 +1,4 @@
-//===- CUDNNTypes.cpp - CUDNN dialect types -----------*- C++ -*-===//
+//===- CUDNNTypes.cpp - CUDNN dialect types ---------------------*- C++ -*-===//
 //
 // This file is licensed under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -41,6 +41,9 @@ static void printDimensionList(AsmPrinter &printer, ArrayRef<int64_t> dims,
 
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNEnums.cpp.inc"
 
+#define GET_ATTRDEF_CLASSES
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
+
 #define GET_TYPEDEF_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.cpp.inc"
 
@@ -48,6 +51,13 @@ void CUDNNDialect::registerTypes() {
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.cpp.inc"
+      >();
+}
+
+void CUDNNDialect::registerAttrs() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
       >();
 }
 

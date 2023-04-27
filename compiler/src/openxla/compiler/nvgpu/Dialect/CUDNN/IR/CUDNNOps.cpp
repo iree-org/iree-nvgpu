@@ -20,9 +20,6 @@
 #include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 
-#define GET_ATTRDEF_CLASSES
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
-
 namespace openxla::compiler::nvgpu::cudnn {
 
 using namespace mlir;
@@ -173,13 +170,6 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   }
 
   return success();
-}
-
-void CUDNNDialect::registerAttrs() {
-  addAttributes<
-#define GET_ATTRDEF_LIST
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.cpp.inc"
-      >();
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

@@ -25,12 +25,15 @@ class ConvertHLOToCUDNN : public ::impl::ConvertHLOToCUDNNBase<
     ConvertHLOToCUDNN> {
  public:
   void runOnOperation() override {
-    RewritePatternSet patterns(&getContext());
-    populateHLOToCUDNNPatterns(patterns);
-    if (failed(::applyPatternsAndFoldGreedily(getOperation(),
-                                              std::move(patterns)))) {
-      signalPassFailure();
-    }
+    auto apply = [&](auto populatePatterns) {
+      RewritePatternSet patterns(&getContext());
+      (*populatePatterns)(patterns);
+      return applyPatternsAndFoldGreedily(getOperation(), std::move(patterns));
+    };
+    if (failed(apply(populateOutlineHLOToCUDNNPatterns)))
+      return signalPassFailure();
+    if (failed(apply(populateConvertHLOToCUDNNPatterns)))
+      return signalPassFailure();
   }
 };
 

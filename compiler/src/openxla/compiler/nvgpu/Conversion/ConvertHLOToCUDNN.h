@@ -12,8 +12,11 @@
 
 namespace openxla::compiler::nvgpu::cudnn {
 
-// Appends StableHLO to cudNN dialect patterns to the given pattern list.
-void populateHLOToCUDNNPatterns(mlir::RewritePatternSet &patterns);
+// Appends patterns to outline StableHLO into a cudnn.graph op.
+void populateOutlineHLOToCUDNNPatterns(mlir::RewritePatternSet &patterns);
+
+// Appends StableHLO to cuDNN dialect conversion patterns.
+void populateConvertHLOToCUDNNPatterns(mlir::RewritePatternSet &patterns);
 
 }  // namespace openxla::compiler::nvgpu::cudnn
 

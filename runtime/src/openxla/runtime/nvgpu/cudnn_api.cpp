@@ -31,70 +31,70 @@ using cudnn_frontend::TensorBuilder;
 #include "openxla/runtime/nvgpu/cudnn_stub.h.inc"
 // clang-format on
 
-static std::vector<CuDNNTensor*> AsPtrs(span<const vm::ref<CuDNNTensor>> refs) {
-  std::vector<CuDNNTensor*> ptrs;
+static std::vector<CudnnTensor*> AsPtrs(span<const vm::ref<CudnnTensor>> refs) {
+  std::vector<CudnnTensor*> ptrs;
   for (auto& ref : refs) ptrs.push_back(ref.get());
   return ptrs;
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNArgTensor
+// CudnnArgTensor
 //===----------------------------------------------------------------------===//
 
-CuDNNArgTensor::CuDNNArgTensor(openxla_cudnn_dynamic_symbols_t* syms,
+CudnnArgTensor::CudnnArgTensor(openxla_cudnn_dynamic_symbols_t* syms,
                                cudnn_frontend::Tensor tensor)
-    : CuDNNTensor(Kind::kArg), syms_(syms), tensor_(std::move(tensor)) {}
+    : CudnnTensor(Kind::kArg), syms_(syms), tensor_(std::move(tensor)) {}
 
-CuDNNArgTensor::~CuDNNArgTensor() {
-  ScopedCuDNNStubs stubs(syms_);
+CudnnArgTensor::~CudnnArgTensor() {
+  ScopedCudnnStubs stubs(syms_);
   tensor_.reset();
 }
 
-const cudnn_frontend::Tensor& CuDNNArgTensor::tensor() const {
+const cudnn_frontend::Tensor& CudnnArgTensor::tensor() const {
   return *tensor_;
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOpResultTensor
+// CudnnOpResultTensor
 //===----------------------------------------------------------------------===//
 
-CuDNNOpResultTensor::CuDNNOpResultTensor(openxla_cudnn_dynamic_symbols_t* syms,
-                                         iree::span<CuDNNTensor* const> inputs,
+CudnnOpResultTensor::CudnnOpResultTensor(openxla_cudnn_dynamic_symbols_t* syms,
+                                         iree::span<CudnnTensor* const> inputs,
                                          cudnn_frontend::Operation operation,
                                          cudnn_frontend::Tensor tensor)
-    : CuDNNTensor(Kind::kOpResult),
+    : CudnnTensor(Kind::kOpResult),
       syms_(syms),
       operation_(std::move(operation)),
       tensor_(std::move(tensor)) {
-  for (CuDNNTensor* input : inputs) inputs_.push_back(vm::retain_ref(input));
+  for (CudnnTensor* input : inputs) inputs_.push_back(vm::retain_ref(input));
 }
 
-CuDNNOpResultTensor::~CuDNNOpResultTensor() {
-  ScopedCuDNNStubs stubs(syms_);
+CudnnOpResultTensor::~CudnnOpResultTensor() {
+  ScopedCudnnStubs stubs(syms_);
   operation_.reset();
   tensor_.reset();
 }
 
-std::vector<CuDNNTensor*> CuDNNOpResultTensor::inputs() const {
+std::vector<CudnnTensor*> CudnnOpResultTensor::inputs() const {
   return AsPtrs(inputs_);
 }
 
-const cudnn_frontend::Operation* CuDNNOpResultTensor::operation() const {
+const cudnn_frontend::Operation* CudnnOpResultTensor::operation() const {
   return &*operation_;
 }
 
-const cudnn_frontend::Tensor& CuDNNOpResultTensor::tensor() const {
+const cudnn_frontend::Tensor& CudnnOpResultTensor::tensor() const {
   return *tensor_;
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNNOperationGraph
+// CudnnOperationGraph
 //===----------------------------------------------------------------------===//
 
-CuDNNOperationGraph::CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
+CudnnOperationGraph::CudnnOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
                                          cudnn_frontend::OperationGraph graph,
-                                         span<CuDNNTensor* const> args,
-                                         span<CuDNNTensor* const> rets)
+                                         span<CudnnTensor* const> args,
+                                         span<CudnnTensor* const> rets)
     : syms_(syms), graph_(std::move(graph)) {
   for (auto* arg : args) {
     args_.push_back(vm::retain_ref(arg));
@@ -106,40 +106,40 @@ CuDNNOperationGraph::CuDNNOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
   }
 }
 
-CuDNNOperationGraph::~CuDNNOperationGraph() {
-  ScopedCuDNNStubs stubs(syms_);
+CudnnOperationGraph::~CudnnOperationGraph() {
+  ScopedCudnnStubs stubs(syms_);
   graph_.reset();
 }
 
-cudnn_frontend::OperationGraph& CuDNNOperationGraph::graph() { return *graph_; }
+cudnn_frontend::OperationGraph& CudnnOperationGraph::graph() { return *graph_; }
 
-std::vector<CuDNNTensor*> CuDNNOperationGraph::args() const {
+std::vector<CudnnTensor*> CudnnOperationGraph::args() const {
   return AsPtrs(args_);
 }
 
-std::vector<CuDNNTensor*> CuDNNOperationGraph::rets() const {
+std::vector<CudnnTensor*> CudnnOperationGraph::rets() const {
   return AsPtrs(rets_);
 }
 
-iree::span<const int64_t> CuDNNOperationGraph::uids() const { return uids_; }
+iree::span<const int64_t> CudnnOperationGraph::uids() const { return uids_; }
 
 //===----------------------------------------------------------------------===//
-// CuDNNExecutable
+// CudnnExecutable
 //===----------------------------------------------------------------------===//
 
-CuDNNExecutable::CuDNNExecutable(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNOperationGraph& graph,
+CudnnExecutable::CudnnExecutable(
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph,
     span<const cudnn_frontend::ExecutionPlan> plans)
     : syms_(syms),
       graph_(vm::retain_ref(&graph)),
       plans_(plans.begin(), plans.end()) {}
 
-CuDNNExecutable::~CuDNNExecutable() {
-  ScopedCuDNNStubs stubs(syms_);
+CudnnExecutable::~CudnnExecutable() {
+  ScopedCudnnStubs stubs(syms_);
   plans_.clear();
 }
 
-const CuDNNOperationGraph& CuDNNExecutable::graph() const { return *graph_; }
+const CudnnOperationGraph& CudnnExecutable::graph() const { return *graph_; }
 
 // Converts IREE HAL buffers to CUDA device pointers.
 static std::vector<CUdeviceptr> GetDevicePointers(
@@ -156,9 +156,9 @@ static std::vector<CUdeviceptr> GetDevicePointers(
   return ptrs;
 }
 
-Status CuDNNExecutable::Execute(cudnnHandle_t handle,
+Status CudnnExecutable::Execute(cudnnHandle_t handle,
                                 span<iree_hal_buffer_t* const> buffers) {
-  ScopedCuDNNStubs stubs(syms_);
+  ScopedCudnnStubs stubs(syms_);
 
   // Check that we have a buffer for every argument and result tensor.
   if (buffers.size() != (graph_->args().size() + graph_->rets().size())) {
@@ -202,11 +202,11 @@ Status CuDNNExecutable::Execute(cudnnHandle_t handle,
 // CreateTensor
 //===----------------------------------------------------------------------===//
 
-StatusOr<vm::ref<CuDNNTensor>> CreateTensor(
+StatusOr<vm::ref<CudnnTensor>> CreateTensor(
     openxla_cudnn_dynamic_symbols_t* syms, span<const int64_t> dims,
     span<const int64_t> strides, int64_t uid, cudnnDataType_t dtype,
     int64_t alignment) {
-  ScopedCuDNNStubs stubs(syms);
+  ScopedCudnnStubs stubs(syms);
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
                                       .setDim(dims.size(), dims.data())
                                       .setStride(strides.size(), strides.data())
@@ -215,18 +215,18 @@ StatusOr<vm::ref<CuDNNTensor>> CreateTensor(
                                       .setDataType(dtype)
                                       .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
-  return vm::ref<CuDNNTensor>(new CuDNNArgTensor(syms, std::move(tensor)));
+  return vm::ref<CudnnTensor>(new CudnnArgTensor(syms, std::move(tensor)));
 }
 
 //===----------------------------------------------------------------------===//
 // CreatePointwiseRelu
 //===----------------------------------------------------------------------===//
 
-StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
+StatusOr<vm::ref<CudnnTensor>> CreatePointwiseRelu(
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
     double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
     bool is_virtual) {
-  ScopedCuDNNStubs stubs(syms);
+  ScopedCudnnStubs stubs(syms);
 
   // Prepare tensor descriptor for activation output.
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
@@ -254,7 +254,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
-  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
       syms, {&input}, std::move(operation), std::move(tensor)));
 }
 
@@ -262,11 +262,11 @@ StatusOr<vm::ref<CuDNNTensor>> CreatePointwiseRelu(
 // CreatePointwiseUnary
 //===----------------------------------------------------------------------===//
 
-StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
+StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CuDNNTensor& x, float alpha, int64_t uid, int64_t alignment,
+    CudnnTensor& x, float alpha, int64_t uid, int64_t alignment,
     bool is_virtual) {
-  ScopedCuDNNStubs stubs(syms);
+  ScopedCudnnStubs stubs(syms);
 
   // Prepare tensor descriptor for the output.
   cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
@@ -294,7 +294,7 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
-  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
       syms, {&x}, std::move(operation), std::move(tensor)));
 }
 
@@ -302,11 +302,11 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseUnary(
 // CreatePointwiseBinary
 //===----------------------------------------------------------------------===//
 
-StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
+StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CuDNNTensor& x, float alpha, CuDNNTensor& b, float alpha2, int64_t uid,
+    CudnnTensor& x, float alpha, CudnnTensor& b, float alpha2, int64_t uid,
     int64_t alignment, bool is_virtual) {
-  ScopedCuDNNStubs stubs(syms);
+  ScopedCudnnStubs stubs(syms);
 
   // TODO(ezhulenev): Pointwise operations in cuDNN do implicit broadcasting, so
   // in general it's unsafe to clone `x` for the output. We have to compute the
@@ -340,7 +340,7 @@ StatusOr<iree::vm::ref<CuDNNTensor>> CreatePointwiseBinary(
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
-  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
       syms, {&x, &b}, std::move(operation), std::move(tensor)));
 }
 
@@ -365,11 +365,11 @@ static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t padding,
   return ((padded - dilated) / stride) + 1;
 }
 
-StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
-    openxla_cudnn_dynamic_symbols_t* syms, CuDNNTensor& input,
-    CuDNNTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
+StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
+    CudnnTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
     cudnnConvolutionMode_t mode) {
-  ScopedCuDNNStubs stubs(syms);
+  ScopedCudnnStubs stubs(syms);
 
   span<const int64_t> input_dims(input->getDim(), input->getDimCount());
   span<const int64_t> filter_dims(filter->getDim(), filter->getDimCount());
@@ -444,7 +444,7 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
-  return vm::ref<CuDNNTensor>(new CuDNNOpResultTensor(
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
       syms, {&input, &filter}, std::move(operation), std::move(tensor)));
 }
 
@@ -453,17 +453,17 @@ StatusOr<vm::ref<CuDNNTensor>> CreateConvolution(
 //===----------------------------------------------------------------------===//
 
 template <typename To>
-static To* DynCast(CuDNNTensor* tensor) {
+static To* DynCast(CudnnTensor* tensor) {
   return To::classof(tensor) ? static_cast<To*>(tensor) : nullptr;
 }
 
-StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
+StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    span<CuDNNTensor* const> rets) {
-  ScopedCuDNNStubs stubs(syms);
+    span<CudnnTensor* const> rets) {
+  ScopedCudnnStubs stubs(syms);
 
   // Tensors that should be passed as inputs when executing cuDNN graph.
-  std::unordered_set<CuDNNTensor*> args;
+  std::unordered_set<CudnnTensor*> args;
 
   // cuDNN operations defining the operation graph.
   std::vector<const cudnn_frontend::Operation*> ops;
@@ -472,20 +472,20 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
   // use-def chains (with an end-to-end test once we'll support them).
 
   // Traverse cuDNN tensor use-def chains starting from returned tensors.
-  std::vector<CuDNNTensor*> worklist(rets.begin(), rets.end());
+  std::vector<CudnnTensor*> worklist(rets.begin(), rets.end());
   while (!worklist.empty()) {
-    CuDNNTensor* tensor = worklist.back();
+    CudnnTensor* tensor = worklist.back();
     worklist.pop_back();
 
     // Operation graph argument that must be passed as input.
-    if (auto* arg = DynCast<CuDNNArgTensor>(tensor)) {
+    if (auto* arg = DynCast<CudnnArgTensor>(tensor)) {
       args.insert(arg);
     }
 
     // Add cudnn_frontend operation and follow inputs.
-    if (auto* op_result = DynCast<CuDNNOpResultTensor>(tensor)) {
+    if (auto* op_result = DynCast<CudnnOpResultTensor>(tensor)) {
       ops.push_back(op_result->operation());
-      std::vector<CuDNNTensor*> inputs = op_result->inputs();
+      std::vector<CudnnTensor*> inputs = op_result->inputs();
       worklist.insert(worklist.end(), inputs.begin(), inputs.end());
     }
   }
@@ -503,14 +503,14 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 
   // Sort arguments by id, to get them in the same order as in `cudnn.graph`
   // operation signature.
-  std::vector<CuDNNTensor*> unique_args(args.begin(), args.end());
+  std::vector<CudnnTensor*> unique_args(args.begin(), args.end());
   std::sort(unique_args.begin(), unique_args.end(),
-            [](CuDNNTensor* a, CuDNNTensor* b) {
+            [](CudnnTensor* a, CudnnTensor* b) {
               return a->tensor().getId() < b->tensor().getId();
             });
 
-  return vm::ref<CuDNNOperationGraph>(
-      new CuDNNOperationGraph(syms, std::move(graph), unique_args, rets));
+  return vm::ref<CudnnOperationGraph>(
+      new CudnnOperationGraph(syms, std::move(graph), unique_args, rets));
 }
 
 //===----------------------------------------------------------------------===//
@@ -522,10 +522,10 @@ StatusOr<vm::ref<CuDNNOperationGraph>> CreateOperationGraph(
 // determenistic results (see CUDNN_NUMERICAL_NOTE_NONDETERMINISTIC note).
 static bool AcceptAllGraphs(cudnnBackendDescriptor_t) { return false; }
 
-iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
+iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    CuDNNOperationGraph& graph) {
-  ScopedCuDNNStubs stubs(syms);
+    CudnnOperationGraph& graph) {
+  ScopedCudnnStubs stubs(syms);
 
   // Collect supported engine configs.
   cudnn_frontend::EngineConfigList configs;
@@ -571,7 +571,7 @@ iree::StatusOr<iree::vm::ref<CuDNNExecutable>> CreateExecutable(
         "didn't find any engine config supporting cuDNN operation graph");
   }
 
-  return vm::ref<CuDNNExecutable>(new CuDNNExecutable(syms, graph, plans));
+  return vm::ref<CudnnExecutable>(new CudnnExecutable(syms, graph, plans));
 }
 
 //===----------------------------------------------------------------------===//
@@ -604,8 +604,8 @@ std::vector<int64_t> GetChannelsLastStrides(span<const int64_t> dims) {
 //===----------------------------------------------------------------------===//
 
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_tensor,
-                             openxla::runtime::nvgpu::CuDNNTensor);
+                             openxla::runtime::nvgpu::CudnnTensor);
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_operation_graph,
-                             openxla::runtime::nvgpu::CuDNNOperationGraph);
+                             openxla::runtime::nvgpu::CudnnOperationGraph);
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_executable,
-                             openxla::runtime::nvgpu::CuDNNExecutable);
+                             openxla::runtime::nvgpu::CudnnExecutable);

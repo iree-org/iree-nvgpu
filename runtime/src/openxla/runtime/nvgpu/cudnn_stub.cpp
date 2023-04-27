@@ -12,13 +12,13 @@ namespace openxla::runtime::nvgpu {
 
 static thread_local openxla_cudnn_dynamic_symbols_t* cudnn_syms = nullptr;
 
-ScopedCuDNNStubs::ScopedCuDNNStubs(openxla_cudnn_dynamic_symbols_t* syms)
+ScopedCudnnStubs::ScopedCudnnStubs(openxla_cudnn_dynamic_symbols_t* syms)
     : syms_(cudnn_syms) {
   cudnn_syms = syms;
 }
 
-ScopedCuDNNStubs::~ScopedCuDNNStubs() { cudnn_syms = syms_; }
+ScopedCudnnStubs::~ScopedCudnnStubs() { cudnn_syms = syms_; }
 
-openxla_cudnn_dynamic_symbols_t* ScopedCuDNNStubs::syms() { return cudnn_syms; }
+openxla_cudnn_dynamic_symbols_t* ScopedCudnnStubs::syms() { return cudnn_syms; }
 
 }  // namespace openxla::runtime::nvgpu

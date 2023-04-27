@@ -20,6 +20,29 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 //===----------------------------------------------------------------------===//
+// cudnn.relu operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_ReluOp : CUDNN_Op<"relu", [Pure]> {
+    let summary = "Relu";
+
+    let arguments = (ins
+      CUDNN_TensorType:$input,
+      TypeAttr:$compute_type,
+      F64Attr:$lower_clip
+    );
+    let results = (outs CUDNN_TensorType:$res);
+
+    let assemblyFormat = [{
+      `(` $input `)`
+         `type` `=` $compute_type
+         `lower_clip` `=` $lower_clip
+          attr-dict `:`
+          functional-type(operands, results)
+    }];
+}
+
+//===----------------------------------------------------------------------===//
 // cuDNN pointwise unary operations
 //===----------------------------------------------------------------------===//
 

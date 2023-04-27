@@ -200,9 +200,8 @@ static LogicalResult convertClamp(stablehlo::ClampOp op,
   Type result_type = getCudnnTensorType(op.getType());
   Value operand = castToCudnnTensor(op.getOperand(), rewriter);
   Type element_type = op.getType().getElementType();
-  rewriter.replaceOpWithNewOp<PointWiseReluOp>(
-      op, result_type, operand, element_type,
-      APFloat(min_or->convertToDouble()));
+  rewriter.replaceOpWithNewOp<ReluOp>(op, result_type, operand, element_type,
+                                      APFloat(min_or->convertToDouble()));
   return success();
 }
 // Converts convolution 'op' into a cudnn.convolution.
@@ -234,8 +233,8 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
   SmallVector<int64_t> dilation = get_attr_or(op.getRhsDilation(), 1);
 
   rewriter.replaceOpWithNewOp<ConvolutionOp>(
-      op, result_type, lhs, rhs, alpha, beta, spatial_dim_count,
-      spatial_stride, pre_padding, post_padding, dilation);
+      op, result_type, lhs, rhs, alpha, beta, spatial_dim_count, spatial_stride,
+      pre_padding, post_padding, dilation);
   return success();
 }
 

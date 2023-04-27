@@ -214,7 +214,6 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
   Type result_type = getCudnnTensorType(op.getType());
   Value lhs = castToCudnnTensor(op.getLhs(), rewriter);
   Value rhs = castToCudnnTensor(op.getRhs(), rewriter);
-  Type element_type = op.getType().getElementType();
 
   APFloat alpha(1.0f);
   APFloat beta(0.0f);
@@ -235,7 +234,7 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
   SmallVector<int64_t> dilation = get_attr_or(op.getRhsDilation(), 1);
 
   rewriter.replaceOpWithNewOp<ConvolutionOp>(
-      op, result_type, lhs, rhs, element_type, alpha, beta, spatial_dim_count,
+      op, result_type, lhs, rhs, alpha, beta, spatial_dim_count,
       spatial_stride, pre_padding, post_padding, dilation);
   return success();
 }

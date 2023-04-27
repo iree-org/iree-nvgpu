@@ -19,9 +19,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 
-#define GET_ATTRDEF_CLASSES
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNAttrs.h.inc"
-
 #define GET_OP_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h.inc"
 

@@ -32,6 +32,22 @@ iree_cc_library(
 
 iree_cc_library(
   NAME
+    cudnn_module_dylib
+  HDRS
+    "cudnn_module.h"
+  SRCS
+    "cudnn_module.cpp"
+  DEPS
+    ::defs
+    ::dynamic_symbols
+    ::cudnn_api
+    iree::runtime
+  PUBLIC
+  SHARED
+)
+
+iree_cc_library(
+  NAME
     cudnn_api
   HDRS
     "cudnn_api.h"

@@ -8,7 +8,7 @@ iree_cc_binary(
   NAME
     openxla-runner
   SRCS
-    "openxla-runner.c"
+    "openxla-runner.cpp"
   DEPS
     iree::base
     iree::base::internal::flags

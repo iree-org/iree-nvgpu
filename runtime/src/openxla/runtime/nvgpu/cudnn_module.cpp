@@ -27,6 +27,7 @@
 
 #include "iree/hal/drivers/cuda/cuda_device.h"
 #include "iree/modules/hal/types.h"
+#include "iree/vm/dynamic/api.h"
 #include "iree/vm/native_module_cc.h"
 #include "openxla/runtime/nvgpu/dynamic_symbols.h"
 #include "openxla/runtime/nvgpu/status_util.h"
@@ -79,7 +80,7 @@ static std::vector<iree_host_size_t> GetRowMajorShape(
 
 //===----------------------------------------------------------------------===//
 // Cudnn module state encapsulates all the state required for running cuDNN
-// operations (launching cuDNN graphs on a stream) at run time.
+// operations (launching cuDNN graphs on a stream) at run time
 //===----------------------------------------------------------------------===//
 
 class CudnnModuleState {
@@ -342,7 +343,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
 }
 
 //===----------------------------------------------------------------------===//
-// Functions dispatch table for CudnnModuleState.
+// Functions dispatch table for CudnnModuleState
 //===----------------------------------------------------------------------===//
 
 using iree::vm::MakeNativeFunction;
@@ -394,7 +395,7 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
 };
 
 //===----------------------------------------------------------------------===//
-// Cudnn module instance that will be allocated and reused across contexts.
+// Cudnn module instance that will be allocated and reused across contexts
 //===----------------------------------------------------------------------===//
 
 class CudnnModule final : public vm::NativeModule<CudnnModuleState> {
@@ -435,13 +436,9 @@ StatusOr<std::unique_ptr<CudnnModuleState>> CudnnModule::CreateState(
                                             &syms_);
 }
 
-}  // namespace openxla::runtime::nvgpu
-
 //===----------------------------------------------------------------------===//
-// Register cuDNN module with IREE runtime.
+// Register cuDNN module with IREE runtime
 //===----------------------------------------------------------------------===//
-
-using namespace openxla::runtime::nvgpu;
 
 template <typename T>
 static iree_status_t RegisterType(iree_vm_instance_t* instance,
@@ -457,9 +454,9 @@ static iree_status_t RegisterType(iree_vm_instance_t* instance,
                                         out_registration);
 }
 
-extern "C" iree_status_t iree_custom_module_cudnn_create(
-    iree_vm_instance_t* instance, iree_hal_device_t* device,
-    iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
+iree_status_t CreateCudnnModule(iree_vm_instance_t* instance,
+                                iree_allocator_t host_allocator,
+                                iree_vm_module_t** out_module) {
   IREE_ASSERT_ARGUMENT(out_module);
 
   auto module = std::make_unique<CudnnModule>(instance, host_allocator);
@@ -468,8 +465,7 @@ extern "C" iree_status_t iree_custom_module_cudnn_create(
   return iree_ok_status();
 }
 
-extern "C" iree_status_t iree_custom_module_cudnn_register_types(
-    iree_vm_instance_t* instance) {
+iree_status_t RegisterCudnnTypes(iree_vm_instance_t* instance) {
   IREE_RETURN_IF_ERROR(RegisterType<CudnnTensor>(instance, "cudnn.tensor",
                                                  &cudnn_tensor_registration));
   IREE_RETURN_IF_ERROR(RegisterType<CudnnHandle>(instance, "cudnn.handle",
@@ -479,4 +475,44 @@ extern "C" iree_status_t iree_custom_module_cudnn_register_types(
   IREE_RETURN_IF_ERROR(RegisterType<CudnnExecutable>(
       instance, "cudnn.executable", &cudnn_executable_registration));
   return iree_ok_status();
+}
+
+}  // namespace openxla::runtime::nvgpu
+
+//===----------------------------------------------------------------------===//
+// Dynamic IREE VM module registration
+//===----------------------------------------------------------------------===//
+
+using namespace openxla::runtime::nvgpu;
+
+extern "C" IREE_VM_DYNAMIC_MODULE_EXPORT iree_status_t
+openxla_create_cudnn_module(iree_vm_dynamic_module_version_t max_version,
+                            iree_vm_instance_t* instance,
+                            iree_host_size_t param_count,
+                            const iree_string_pair_t* params,
+                            iree_allocator_t host_allocator,
+                            iree_vm_module_t** out_module) {
+  // Ensure the version matches; the version will change if the VM module
+  // interface changes and existing libraries are incompatible.
+  if (max_version != IREE_VM_DYNAMIC_MODULE_VERSION_LATEST) {
+    return iree_make_status(
+        IREE_STATUS_UNIMPLEMENTED,
+        "unsupported runtime version %u, module compiled with version %u",
+        max_version, IREE_VM_DYNAMIC_MODULE_VERSION_LATEST);
+  }
+
+#if IREE_TRACING_FEATURES
+  // Today Tracy cannot be used with custom dynamic modules as it'll try to
+  // create a new tracing context distinct from the hosting application. Custom
+  // module libraries should be built with tracing disabled.
+  fprintf(stderr,
+          "Tracy is not currently supported in custom dynamic modules\n");
+#endif  // IREE_TRACING_FEATURES
+
+  // Ensure HAL types are available. We need to do this as we're being
+  // dynamically loaded and can't automatically access the hosting process
+  // variables.
+  IREE_RETURN_IF_ERROR(iree_hal_module_resolve_all_types(instance));
+  IREE_RETURN_IF_ERROR(RegisterCudnnTypes(instance));
+  return CreateCudnnModule(instance, host_allocator, out_module);
 }

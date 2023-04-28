@@ -21,5 +21,6 @@ iree_cc_binary(
     iree::tooling::instrument_util
     iree::tooling::vm_util
     iree::vm
+    iree::runtime
     openxla::runtime::nvgpu::cudnn_module
 )

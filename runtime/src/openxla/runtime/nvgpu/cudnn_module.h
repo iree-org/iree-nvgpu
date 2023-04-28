@@ -8,7 +8,6 @@
 #define OPENXLA_RUNTIME_NVGPU_CUDNN_MODULE_H_
 
 #include "iree/base/api.h"
-#include "iree/hal/api.h"
 #include "iree/vm/api.h"
 
 namespace openxla::runtime::nvgpu {

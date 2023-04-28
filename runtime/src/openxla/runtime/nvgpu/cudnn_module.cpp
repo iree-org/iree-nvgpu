@@ -12,10 +12,7 @@
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
 #include <iree/hal/buffer.h>
-#include <iree/hal/channel.h>
-#include <iree/hal/drivers/cuda/api.h>
 #include <iree/hal/drivers/cuda/dynamic_symbols.h>
-#include <iree/hal/drivers/cuda/status_util.h>
 #include <iree/vm/list.h>
 #include <iree/vm/ref_cc.h>
 #include <openxla/runtime/nvgpu/cudnn_api.h>
@@ -25,7 +22,6 @@
 #include <cstring>
 #include <memory>
 
-#include "iree/hal/drivers/cuda/cuda_device.h"
 #include "iree/modules/hal/types.h"
 #include "iree/vm/dynamic/api.h"
 #include "iree/vm/native_module_cc.h"

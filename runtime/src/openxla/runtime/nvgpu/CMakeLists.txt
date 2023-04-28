@@ -26,7 +26,6 @@ iree_cc_library(
     ::defs
     ::dynamic_symbols
     ::cudnn_api
-    iree::runtime
   PUBLIC
 )
 
@@ -41,7 +40,6 @@ iree_cc_library(
     ::defs
     ::dynamic_symbols
     ::cudnn_api
-    iree::runtime
   PUBLIC
   SHARED
 )
@@ -58,6 +56,7 @@ iree_cc_library(
     ::dynamic_symbols
     ::cudnn_stub
     cudnn_frontend
+    iree::hal::drivers::cuda
     iree::vm
   PUBLIC
 )

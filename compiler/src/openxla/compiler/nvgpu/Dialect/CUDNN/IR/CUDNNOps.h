@@ -9,6 +9,7 @@
 #ifndef CUDNN_CUDNNOPS_H
 #define CUDNN_CUDNNOPS_H
 
+#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/FunctionInterfaces.h"

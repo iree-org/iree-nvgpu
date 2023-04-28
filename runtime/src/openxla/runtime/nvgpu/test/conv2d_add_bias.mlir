@@ -36,7 +36,10 @@ func.func @main() -> tensor<8x4x4x32xf32> {
   %b = util.global.load @b : tensor<8x4x4x32xf32>
   %c = util.global.load @c : tensor<1x1x1x32xf32>
 
-  %0 = cudnn.call @conv2d(%x, %w, %b, %c)
+  %device = hal.ex.shared_device : !hal.device
+  %handle = cudnn.handle(%device) : !cudnn.handle
+
+  %0 = cudnn.call handle(%handle) @conv2d(%x, %w, %b, %c)
        : (tensor<8x4x4x32xf32>, tensor<32x1x1x32xf32>,
           tensor<8x4x4x32xf32>, tensor<1x1x1x32xf32>)
        -> tensor<8x4x4x32xf32>

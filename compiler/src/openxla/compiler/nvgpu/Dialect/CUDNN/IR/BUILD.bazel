@@ -53,6 +53,7 @@ cc_library(
         ":CUDNNOpsGen",
         ":CUDNNTypesGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
+        "@iree_core//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
@@ -63,11 +64,17 @@ iree_gentbl_cc_library(
     name = "CUDNNOpsGen",
     tbl_outs = [
         (
-            ["--gen-dialect-decls"],
+            [
+                "--gen-dialect-decls",
+                "--dialect=cudnn",
+            ],
             "CUDNNOpsDialect.h.inc",
         ),
         (
-            ["--gen-dialect-defs"],
+            [
+                "--gen-dialect-defs",
+                "--dialect=cudnn",
+            ],
             "CUDNNOpsDialect.cpp.inc",
         ),
         (

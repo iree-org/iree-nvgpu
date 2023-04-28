@@ -7,16 +7,19 @@
 #ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
 #define OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
 
+#include <iree/hal/channel.h>
 #define NV_CUDNN_DISABLE_EXCEPTION
 
 #include <cudnn_frontend.h>
 #include <iree/hal/buffer.h>
+#include <iree/hal/device.h>
 #include <iree/vm/ref_cc.h>
 
 #include <optional>
 
 #include "iree/base/internal/span.h"
 #include "iree/vm/api.h"
+#include "openxla/runtime/nvgpu/cudnn_headers.h"
 #include "openxla/runtime/nvgpu/dynamic_symbols.h"
 
 namespace openxla::runtime::nvgpu {
@@ -100,13 +103,36 @@ class CudnnOpResultTensor final : public CudnnTensor {
 };
 
 //===----------------------------------------------------------------------===//
+// Cudnn handle
+//===----------------------------------------------------------------------===//
+
+class CudnnHandle : public iree::vm::RefObject<CudnnHandle> {
+ public:
+  CudnnHandle(openxla_cudnn_dynamic_symbols_t* syms,
+              iree::vm::ref<iree_hal_device_t> device, cudnnHandle_t handle);
+  ~CudnnHandle();
+
+  cudnnHandle_t handle() const;
+  iree_hal_device_t* device() const;
+
+ private:
+  openxla_cudnn_dynamic_symbols_t* syms_;
+
+  // Underlying CUDA HAL device used to create a cuDNN handle.
+  iree::vm::ref<iree_hal_device_t> device_;
+
+  // cuDNN handle instantiated for a CUDA HAL device context.
+  cudnnHandle_t handle_;
+};
+
+//===----------------------------------------------------------------------===//
 // Cudnn operation graph
 //===----------------------------------------------------------------------===//
 
 class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
  public:
   CudnnOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
-                      cudnn_frontend::OperationGraph graph,
+                      CudnnHandle& handle, cudnn_frontend::OperationGraph graph,
                       iree::span<CudnnTensor* const> args,
                       iree::span<CudnnTensor* const> rets);
   ~CudnnOperationGraph();
@@ -118,8 +144,13 @@ class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
 
   iree::span<const int64_t> uids() const;
 
+  cudnnHandle_t handle() const;
+  iree_hal_device_t* device() const;
+
  private:
   openxla_cudnn_dynamic_symbols_t* syms_;
+
+  iree::vm::ref<CudnnHandle> handle_;
   std::optional<cudnn_frontend::OperationGraph> graph_;
 
   std::vector<iree::vm::ref<CudnnTensor>> args_;
@@ -148,8 +179,10 @@ class CudnnExecutable : public iree::vm::RefObject<CudnnExecutable> {
 
   // Executes operation graph with user provided buffers using one of the
   // available execution plans.
-  iree::Status Execute(cudnnHandle_t handle,
-                       iree::span<iree_hal_buffer_t* const> buffers);
+  iree::Status Execute(iree::span<iree_hal_buffer_t* const> buffers);
+
+  iree_hal_device_t* device() const;
+  cudnnHandle_t handle() const;
 
   // TODO(ezhulenev): Add functions for auto-tuning executable to pick the best
   // performing execution plan at run time.
@@ -195,14 +228,17 @@ iree::StatusOr<iree::vm::ref<CudnnTensor>> CreateConvolution(
     cudnnConvolutionMode_t mode);
 
 // Creates an operation graph computing tensor results.
+iree::StatusOr<iree::vm::ref<CudnnHandle>> CreateHandle(
+    openxla_cudnn_dynamic_symbols_t* syms, iree_hal_device_t* device);
+
+// Creates an operation graph computing tensor results.
 iree::StatusOr<iree::vm::ref<CudnnOperationGraph>> CreateOperationGraph(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnHandle& handle,
     iree::span<CudnnTensor* const> rets);
 
 // Creates an executable from the operation graph.
 iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    CudnnOperationGraph& graph);
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph);
 
 //===----------------------------------------------------------------------===//
 // Helper functions for setting up cuDNN descriptors
@@ -224,6 +260,8 @@ std::vector<int64_t> GetChannelsLastStrides(iree::span<const int64_t> dims);
 
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_tensor,
                               openxla::runtime::nvgpu::CudnnTensor);
+IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_handle,
+                              openxla::runtime::nvgpu::CudnnHandle);
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_operation_graph,
                               openxla::runtime::nvgpu::CudnnOperationGraph);
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_executable,

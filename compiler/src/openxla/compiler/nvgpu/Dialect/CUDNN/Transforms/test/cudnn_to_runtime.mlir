@@ -206,6 +206,41 @@ func.func @main(%handle: !cudnn.handle,
 // CHECK: @cudnn.execute.1(!cudnn.executable, !hal.buffer_view) -> !hal.buffer_view
 
 // -----
+// Check that cuDNN graphs that use global handle can be instantiated into
+// executables at module loading time.
+
+util.global @handle : !cudnn.handle
+
+cudnn.graph @graph(%arg: !cudnn.tensor<1x4x8xf32>) -> !cudnn.tensor<1x4x8xf32> {
+  cudnn.return %arg: !cudnn.tensor<1x4x8xf32>
+}
+
+func.func @main(%arg: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
+  %handle = util.global.load @handle : !cudnn.handle
+  %0 = cudnn.call handle(%handle) @graph(%arg)
+       : (tensor<1x4x8xf32>) -> tensor<1x4x8xf32>
+  return %0 : tensor<1x4x8xf32>
+}
+
+// CHECK: util.global public @handle : !cudnn.handle
+
+// CHECK: func @graph.builder({{.*}}: !cudnn.handle) -> !cudnn.operation_graph
+
+// CHECK: util.global public @graph.executable : !cudnn.executable
+// CHECK: util.initializer {
+// CHECK:   %handle = util.global.load @handle : !cudnn.handle
+// CHECK:   %[[GRAPH:.*]] = func.call @graph.builder(%handle)
+// CHECK:   %[[EXEC:.*]] = func.call @cudnn.executable.create(%[[GRAPH]])
+// CHECK:   util.global.store %[[EXEC]], @graph.executable : !cudnn.executable
+// CHECK:   util.initializer.return
+// CHECK: }
+
+// CHECK: func.func @main(%[[ARG:.*]]: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
+// CHECK:   %[[LOADED:.*]] = util.global.load @graph.executable
+// CHECK:   call @cudnn.execute.1(%[[LOADED]]
+// CHECK: }
+
+// -----
 
 func.func @main(%arg0: !hal.device) -> !cudnn.handle {
   %0 = cudnn.handle(%arg0) : !cudnn.handle

@@ -6,6 +6,9 @@
 
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/ConvertCUDNNToRuntime.h"
 
+#include <iree/compiler/Dialect/Util/IR/UtilOps.h>
+#include <iree/compiler/Dialect/Util/IR/UtilTypes.h>
+
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -316,6 +319,7 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
         StringAttr::get(ctx, llvm::formatv("{0}.builder", op.getName())),
         FunctionType::get(ctx, {HandleType::get(ctx)},
                           {OperationGraphType::get(ctx)}));
+    api->symTable(module).insert(builder);
 
     Block *body = builder.addEntryBlock();
     b.setInsertionPointToStart(body);
@@ -378,24 +382,23 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
 
     // Find the graph builder from the callee graph name.
     auto builder = api->symTable(module).lookup<func::FuncOp>(
-        StringAttr::get(ctx, op.getCallee() + ".builder"));
+        (op.getCallee() + ".builder").str());
     if (!builder)
       return rewriter.notifyMatchFailure(op, "graph builder was not found");
 
-    // Call a builder function to get an operation graph.
-    auto operationGraph = b.create<func::CallOp>(
-        builder.getSymName(), OperationGraphType::get(ctx), op.getHandle());
-
-    // Build an executable from the operation graph.
-    auto executableCreate = api->getExecutableCreateFunction(rewriter, module);
-    auto executable = b.create<func::CallOp>(executableCreate.getSymName(),
-                                             ExecutableType::get(ctx),
-                                             operationGraph.getResult(0));
+    // If cuDNN handle is loaded from a global, we can construct executable at
+    // module initialization time, otherwise construct it at the call site.
+    auto loadHandle = dyn_cast_or_null<IREE::Util::GlobalLoadOp>(
+        op.getHandle().getDefiningOp());
+    Value executable =
+        loadHandle
+            ? getGlobalExecutable(op, b, rewriter, builder, loadHandle)
+            : getLocalExecutable(op, b, rewriter, builder, op.getHandle());
 
     auto bufferView = IREE::HAL::BufferViewType::get(ctx);
 
     // Export all tensor arguments to HAL buffer views.
-    SmallVector<Value> args = {executable->getResult(0)};
+    SmallVector<Value> args = {executable};
     for (auto [index, arg] : llvm::enumerate(op.getArguments())) {
       auto name = llvm::formatv("{0}.arg.{1}", op.getCallee(), index);
       args.push_back(b.create<IREE::HAL::TensorExportOp>(
@@ -414,6 +417,57 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
         StringAttr::get(ctx, op.getCallee() + ".result"));
 
     return success();
+  }
+
+ private:
+  Value getLocalExecutable(cudnn::CallOp op, ImplicitLocOpBuilder &b,
+                           ConversionPatternRewriter &rewriter,
+                           func::FuncOp graphBuilder, Value handle) const {
+    MLIRContext *ctx = getContext();
+    ModuleOp module = op->getParentOfType<ModuleOp>();
+
+    // Call a builder function to get an operation graph.
+    auto operationGraph = b.create<func::CallOp>(
+        graphBuilder.getSymName(), OperationGraphType::get(ctx), handle);
+
+    // Build an executable from the operation graph.
+    auto executableCreate = api->getExecutableCreateFunction(rewriter, module);
+    auto executable = b.create<func::CallOp>(executableCreate.getSymName(),
+                                             ExecutableType::get(ctx),
+                                             operationGraph.getResult(0));
+
+    return executable.getResult(0);
+  }
+
+  Value getGlobalExecutable(cudnn::CallOp op, ImplicitLocOpBuilder &b,
+                            ConversionPatternRewriter &rewriter,
+                            func::FuncOp graphBuilder,
+                            IREE::Util::GlobalLoadOp loadHandle) const {
+    MLIRContext *ctx = getContext();
+
+    // Add a global that will hold the cuDNN executable constructed from a graph
+    // builder right after the builder definition.
+    b.setInsertionPointAfter(graphBuilder);
+    auto global = b.create<IREE::Util::GlobalOp>(
+        (op.getCallee() + ".executable").str(),
+        /*isMutable=*/false, ExecutableType::get(ctx));
+
+    // Construct operation graph and executable at module initialization time.
+    auto initializer = b.create<IREE::Util::InitializerOp>();
+    b.setInsertionPointToStart(initializer.addEntryBlock());
+
+    auto handle = b.create<IREE::Util::GlobalLoadOp>(HandleType::get(ctx),
+                                                     loadHandle.getGlobal());
+    auto executable = getLocalExecutable(op, b, rewriter, graphBuilder, handle);
+    b.create<IREE::Util::GlobalStoreOp>(executable, global.getSymName());
+    b.create<IREE::Util::InitializerReturnOp>();
+
+    // Load executable from a global right before the original op.
+    b.setInsertionPoint(op);
+    auto loadedExecutable = b.create<IREE::Util::GlobalLoadOp>(
+        ExecutableType::get(ctx), global.getSymName());
+
+    return loadedExecutable.getResult();
   }
 };
 

@@ -12,10 +12,10 @@
 namespace openxla::runtime::nvgpu {
 
 // RAII helper to bind cuDNN stubs to dynamically resolved symbols.
-class ScopedCuDNNStubs {
+class ScopedCudnnStubs {
  public:
-  ScopedCuDNNStubs(openxla_cudnn_dynamic_symbols_t* syms);
-  ~ScopedCuDNNStubs();
+  ScopedCudnnStubs(openxla_cudnn_dynamic_symbols_t* syms);
+  ~ScopedCudnnStubs();
 
   static openxla_cudnn_dynamic_symbols_t* syms();
 

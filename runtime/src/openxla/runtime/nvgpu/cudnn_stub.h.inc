@@ -19,7 +19,7 @@ cudnnStatus_t CUDNNWINAPI cudnnBackendGetAttribute(
     cudnnBackendAttributeName_t attributeName,
     cudnnBackendAttributeType_t attributeType, int64_t requestedElementCount,
     int64_t* elementCount, void* arrayOfElements) {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnBackendGetAttribute(descriptor, attributeName,
                                         attributeType, requestedElementCount,
@@ -31,7 +31,7 @@ cudnnBackendSetAttribute(cudnnBackendDescriptor_t descriptor,
                          cudnnBackendAttributeName_t attributeName,
                          cudnnBackendAttributeType_t attributeType,
                          int64_t elementCount, const void* arrayOfElements) {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnBackendSetAttribute(
       descriptor, attributeName, attributeType, elementCount, arrayOfElements);
@@ -40,27 +40,27 @@ cudnnBackendSetAttribute(cudnnBackendDescriptor_t descriptor,
 cudnnStatus_t CUDNNWINAPI
 cudnnBackendCreateDescriptor(cudnnBackendDescriptorType_t descriptorType,
                              cudnnBackendDescriptor_t* descriptor) {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnBackendCreateDescriptor(descriptorType, descriptor);
 }
 
 cudnnStatus_t CUDNNWINAPI
 cudnnBackendDestroyDescriptor(cudnnBackendDescriptor_t descriptor) {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnBackendDestroyDescriptor(descriptor);
 }
 
 cudnnStatus_t CUDNNWINAPI
 cudnnBackendFinalize(cudnnBackendDescriptor_t descriptor) {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnBackendFinalize(descriptor);
 }
 
 size_t CUDNNWINAPI cudnnGetVersion() {
-  auto* syms = openxla::runtime::nvgpu::ScopedCuDNNStubs::syms();
+  auto* syms = openxla::runtime::nvgpu::ScopedCudnnStubs::syms();
   IREE_ASSERT(syms);
   return syms->cudnnGetVersion();
 }

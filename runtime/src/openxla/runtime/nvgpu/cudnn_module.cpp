@@ -77,46 +77,46 @@ static std::vector<iree_host_size_t> GetRowMajorShape(
 }
 
 //===----------------------------------------------------------------------===//
-// CuDNN module state encapsulates all the state required for running cuDNN
+// Cudnn module state encapsulates all the state required for running cuDNN
 // operations (launching cuDNN graphs on a stream) at run time.
 //===----------------------------------------------------------------------===//
 
-class CuDNNModuleState {
+class CudnnModuleState {
   // TODO(ezhulenev): This is a random value and never really verified at run
   // time. We always have to check that buffers we see at run time are properly
   // aligned according to what we promised to cuDNN.
   static constexpr int64_t kAlignment = 32;
 
  public:
-  CuDNNModuleState(iree_hal_device_t* device, iree_allocator_t host_allocator,
+  CudnnModuleState(iree_hal_device_t* device, iree_allocator_t host_allocator,
                    iree_hal_cuda_dynamic_symbols_t cuda_syms,
                    openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
-  ~CuDNNModuleState();
+  ~CudnnModuleState();
 
   enum class TensorFormat { kRowMajor, kChannelsLast };
 
   // Creates a new tensor with given shape and layout.
   template <size_t rank, typename Layout = RowMajor>
-  StatusOr<vm::ref<CuDNNTensor>> TensorCreate(
+  StatusOr<vm::ref<CudnnTensor>> TensorCreate(
       int64_t dtype, std::array<int64_t, rank> dimensions);
 
   // Creates a cuDNN operation graph computing `tensor` result.
-  StatusOr<vm::ref<CuDNNOperationGraph>> OperationGraphCreate(
-      const vm::ref<CuDNNTensor> tensor);
+  StatusOr<vm::ref<CudnnOperationGraph>> OperationGraphCreate(
+      const vm::ref<CudnnTensor> tensor);
 
   // Creates a cuDNN executable from the given operation graph.
-  StatusOr<vm::ref<CuDNNExecutable>> Executable(
-      const vm::ref<CuDNNOperationGraph> graph);
+  StatusOr<vm::ref<CudnnExecutable>> Executable(
+      const vm::ref<CudnnOperationGraph> graph);
 
   // Executes cuDNN executable with given HAL buffer view inputs and returns
   // result as a HAL buffer view.
   template <size_t n>
   StatusOr<vm::ref<iree_hal_buffer_view_t>> Execute(
-      const vm::ref<CuDNNExecutable> executable,
+      const vm::ref<CudnnExecutable> executable,
       std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs);
 
   // Creates a pointwise relu operation and returns result tensor.
-  StatusOr<vm::ref<CuDNNTensor>> PointwiseRelu(const vm::ref<CuDNNTensor> input,
+  StatusOr<vm::ref<CudnnTensor>> PointwiseRelu(const vm::ref<CudnnTensor> input,
                                                float lower_clip,
                                                float upper_clip, int64_t uid,
                                                int64_t alignment,
@@ -124,27 +124,27 @@ class CuDNNModuleState {
 
   // Creates a pointwise unary operation and returns a result tensor.
   template <cudnnPointwiseMode_t mode>
-  StatusOr<vm::ref<CuDNNTensor>> PointwiseUnary(const vm::ref<CuDNNTensor> x,
+  StatusOr<vm::ref<CudnnTensor>> PointwiseUnary(const vm::ref<CudnnTensor> x,
                                                 float alpha,
                                                 int32_t is_virtual);
 
   // Creates a pointwise binary operation and returns a result tensor.
   template <cudnnPointwiseMode_t mode>
-  StatusOr<vm::ref<CuDNNTensor>> PointwiseBinary(const vm::ref<CuDNNTensor> x,
+  StatusOr<vm::ref<CudnnTensor>> PointwiseBinary(const vm::ref<CudnnTensor> x,
                                                  float alpha,
-                                                 const vm::ref<CuDNNTensor> b,
+                                                 const vm::ref<CudnnTensor> b,
                                                  float alpha2,
                                                  int32_t is_virtual);
 
   // Creates a bias operation and returns a result tensor.
-  StatusOr<vm::ref<CuDNNTensor>> Bias(const vm::ref<CuDNNTensor> x,
-                                      const vm::ref<CuDNNTensor> b,
+  StatusOr<vm::ref<CudnnTensor>> Bias(const vm::ref<CudnnTensor> x,
+                                      const vm::ref<CudnnTensor> b,
                                       int32_t is_virtual);
 
   // Creates a convolution operation and returns result tensor.
   template <size_t spatial_dims>
-  StatusOr<vm::ref<CuDNNTensor>> Convolution(
-      const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> w,
+  StatusOr<vm::ref<CudnnTensor>> Convolution(
+      const vm::ref<CudnnTensor> x, const vm::ref<CudnnTensor> w,
       std::array<int64_t, spatial_dims> stride,
       std::array<int64_t, spatial_dims> pre_padding,
       std::array<int64_t, spatial_dims> post_padding,
@@ -152,14 +152,14 @@ class CuDNNModuleState {
       int32_t mode);
 
   // Prints tensor debug information to stderr.
-  Status PrintTensorDebug(const vm::ref<CuDNNTensor> tensor);
+  Status PrintTensorDebug(const vm::ref<CudnnTensor> tensor);
 
   // Prints graph debug information to stderr.
-  Status PrintGraphDebug(const vm::ref<CuDNNOperationGraph> graph);
+  Status PrintGraphDebug(const vm::ref<CudnnOperationGraph> graph);
 
  private:
-  CuDNNModuleState(const CuDNNModuleState&) = delete;
-  CuDNNModuleState& operator=(const CuDNNModuleState&) = delete;
+  CudnnModuleState(const CudnnModuleState&) = delete;
+  CudnnModuleState& operator=(const CudnnModuleState&) = delete;
 
   iree_hal_device_t* device_;
   iree_allocator_t host_allocator_;
@@ -176,7 +176,7 @@ class CuDNNModuleState {
   uint64_t uid_ = 0;
 };
 
-CuDNNModuleState::CuDNNModuleState(iree_hal_device_t* device,
+CudnnModuleState::CudnnModuleState(iree_hal_device_t* device,
                                    iree_allocator_t host_allocator,
                                    iree_hal_cuda_dynamic_symbols_t cuda_syms,
                                    openxla_cudnn_dynamic_symbols_t syms,
@@ -187,7 +187,7 @@ CuDNNModuleState::CuDNNModuleState(iree_hal_device_t* device,
       syms_(syms),
       handle_(handle) {}
 
-CuDNNModuleState::~CuDNNModuleState() {
+CudnnModuleState::~CudnnModuleState() {
   CUDNN_STATUS_CHECK_OK(&syms_, cudnnDestroy(handle_));
 }
 
@@ -204,7 +204,7 @@ static StatusOr<cudnnConvolutionMode_t> ToCudnnConvolutionMode(int32_t mode) {
 }
 
 template <size_t rank, typename Layout>
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::TensorCreate(
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::TensorCreate(
     int64_t dtype, std::array<int64_t, rank> dimensions) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
   std::array<int64_t, rank> strides = Layout::strides(dimensions);
@@ -212,51 +212,51 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::TensorCreate(
                       kAlignment);
 }
 
-Status CuDNNModuleState::PrintTensorDebug(const vm::ref<CuDNNTensor> tensor) {
+Status CudnnModuleState::PrintTensorDebug(const vm::ref<CudnnTensor> tensor) {
   std::string desc = tensor->tensor().describe();
   fprintf(stderr, "Tensor: %s\n", desc.c_str());
   return OkStatus();
 }
 
-Status CuDNNModuleState::PrintGraphDebug(
-    const vm::ref<CuDNNOperationGraph> graph) {
+Status CudnnModuleState::PrintGraphDebug(
+    const vm::ref<CudnnOperationGraph> graph) {
   std::string desc = graph->graph().describe();
   fprintf(stderr, "Graph: %s\n", desc.c_str());
   return OkStatus();
 }
 
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseRelu(
-    const vm::ref<CuDNNTensor> input, float lower_clip, float upper_clip,
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseRelu(
+    const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
     int64_t uid, int64_t alignment, int32_t is_virtual) {
   return CreatePointwiseRelu(&syms_, *input, lower_clip, upper_clip, uid,
                              alignment, is_virtual);
 }
 
 template <cudnnPointwiseMode_t mode>
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseUnary(
-    const vm::ref<CuDNNTensor> x, float alpha, int32_t is_virtual) {
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseUnary(
+    const vm::ref<CudnnTensor> x, float alpha, int32_t is_virtual) {
   return CreatePointwiseUnary(&syms_, mode, *x, alpha, uid_++, kAlignment,
                               is_virtual);
 }
 
 template <cudnnPointwiseMode_t mode>
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::PointwiseBinary(
-    const vm::ref<CuDNNTensor> x, float alpha, const vm::ref<CuDNNTensor> b,
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseBinary(
+    const vm::ref<CudnnTensor> x, float alpha, const vm::ref<CudnnTensor> b,
     float alpha2, int32_t is_virtual) {
   return CreatePointwiseBinary(&syms_, mode, *x, alpha, *b, alpha2, uid_++,
                                kAlignment, is_virtual);
 }
 
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Bias(
-    const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> b,
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Bias(
+    const vm::ref<CudnnTensor> x, const vm::ref<CudnnTensor> b,
     int32_t is_virtual) {
   return CreatePointwiseBinary(&syms_, CUDNN_POINTWISE_ADD, *x, 1.0, *b, 1.0,
                                uid_++, kAlignment, is_virtual);
 }
 
 template <size_t spatial_dims>
-StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
-    const vm::ref<CuDNNTensor> x, const vm::ref<CuDNNTensor> w,
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Convolution(
+    const vm::ref<CudnnTensor> x, const vm::ref<CudnnTensor> w,
     std::array<int64_t, spatial_dims> stride,
     std::array<int64_t, spatial_dims> pre_padding,
     std::array<int64_t, spatial_dims> post_padding,
@@ -268,23 +268,23 @@ StatusOr<vm::ref<CuDNNTensor>> CuDNNModuleState::Convolution(
                            conv_mode);
 }
 
-StatusOr<vm::ref<CuDNNOperationGraph>> CuDNNModuleState::OperationGraphCreate(
-    const vm::ref<CuDNNTensor> tensor) {
+StatusOr<vm::ref<CudnnOperationGraph>> CudnnModuleState::OperationGraphCreate(
+    const vm::ref<CudnnTensor> tensor) {
   return CreateOperationGraph(&syms_, handle_, {tensor.get()});
 }
 
-StatusOr<vm::ref<CuDNNExecutable>> CuDNNModuleState::Executable(
-    const vm::ref<CuDNNOperationGraph> graph) {
+StatusOr<vm::ref<CudnnExecutable>> CudnnModuleState::Executable(
+    const vm::ref<CudnnOperationGraph> graph) {
   return CreateExecutable(&syms_, handle_, *graph);
 }
 
 template <size_t n>
-StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
-    const vm::ref<CuDNNExecutable> executable,
+StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
+    const vm::ref<CudnnExecutable> executable,
     std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs) {
   // Arguments and results defined by the operation graph.
-  std::vector<CuDNNTensor*> args = executable->graph().args();
-  std::vector<CuDNNTensor*> rets = executable->graph().rets();
+  std::vector<CudnnTensor*> args = executable->graph().args();
+  std::vector<CudnnTensor*> rets = executable->graph().rets();
   IREE_ASSERT_EQ(rets.size(), 1);
 
   // Tensors required for running single convolution operation.
@@ -344,14 +344,14 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CuDNNModuleState::Execute(
 }
 
 //===----------------------------------------------------------------------===//
-// Functions dispatch table for CuDNNModuleState.
+// Functions dispatch table for CudnnModuleState.
 //===----------------------------------------------------------------------===//
 
 using iree::vm::MakeNativeFunction;
 
-using State = CuDNNModuleState;
+using State = CudnnModuleState;
 
-static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
+static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
     // Create cuDNN tensors
     MakeNativeFunction("tensor.create.4d", &State::TensorCreate<4>),
     MakeNativeFunction("tensor.create.4d.nhwc", &State::TensorCreate<4, NHWC>),
@@ -393,21 +393,21 @@ static const vm::NativeFunction<State> kCuDNNModuleFunctions[] = {
 };
 
 //===----------------------------------------------------------------------===//
-// CuDNN module instance that will be allocated and reused across contexts.
+// Cudnn module instance that will be allocated and reused across contexts.
 //===----------------------------------------------------------------------===//
 
-class CuDNNModule final : public vm::NativeModule<CuDNNModuleState> {
+class CudnnModule final : public vm::NativeModule<CudnnModuleState> {
  public:
-  CuDNNModule(iree_vm_instance_t* instance, iree_hal_device_t* device,
+  CudnnModule(iree_vm_instance_t* instance, iree_hal_device_t* device,
               iree_allocator_t host_allocator, CUcontext cuda_ctx);
 
-  StatusOr<std::unique_ptr<CuDNNModuleState>> CreateState(
+  StatusOr<std::unique_ptr<CudnnModuleState>> CreateState(
       iree_allocator_t host_allocator) override;
 
  private:
   static constexpr uint32_t kVersion = 0;
 
-  using NativeModule = vm::NativeModule<CuDNNModuleState>;
+  using NativeModule = vm::NativeModule<CudnnModuleState>;
 
   // Retain a reference to the HAL (CUDA) device to keep CUDA context wrapper
   // alive for the duration of cuDNN module lifetime.
@@ -417,15 +417,15 @@ class CuDNNModule final : public vm::NativeModule<CuDNNModuleState> {
   CUcontext cuda_ctx_;
 };
 
-CuDNNModule::CuDNNModule(iree_vm_instance_t* instance,
+CudnnModule::CudnnModule(iree_vm_instance_t* instance,
                          iree_hal_device_t* device,
                          iree_allocator_t host_allocator, CUcontext cuda_ctx)
-    : NativeModule("cudnn", CuDNNModule::kVersion, instance, host_allocator,
-                   {kCuDNNModuleFunctions}),
+    : NativeModule("cudnn", CudnnModule::kVersion, instance, host_allocator,
+                   {kCudnnModuleFunctions}),
       device_(vm::retain_ref(device)),
       cuda_ctx_(cuda_ctx) {}
 
-StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
+StatusOr<std::unique_ptr<CudnnModuleState>> CudnnModule::CreateState(
     iree_allocator_t host_allocator) {
   // Load CUDA and resolbe API symbols.
   iree_hal_cuda_dynamic_symbols_t cuda_syms;
@@ -444,7 +444,7 @@ StatusOr<std::unique_ptr<CuDNNModuleState>> CuDNNModule::CreateState(
   // immediately after device is created, however it might not always be true?
   CUDNN_RETURN_IF_ERROR(&syms, cudnnCreate(&handle), "cudnnCreate");
 
-  return std::make_unique<CuDNNModuleState>(device_.get(), host_allocator,
+  return std::make_unique<CudnnModuleState>(device_.get(), host_allocator,
                                             cuda_syms, syms, handle);
 }
 
@@ -478,7 +478,7 @@ extern "C" iree_status_t iree_custom_module_cudnn_create(
   CUcontext cuda_ctx;
   IREE_RETURN_IF_ERROR(iree_hal_cuda_device_get_context(device, &cuda_ctx));
   auto module =
-      std::make_unique<CuDNNModule>(instance, device, host_allocator, cuda_ctx);
+      std::make_unique<CudnnModule>(instance, device, host_allocator, cuda_ctx);
   *out_module = module.release()->interface();
 
   return iree_ok_status();
@@ -486,11 +486,11 @@ extern "C" iree_status_t iree_custom_module_cudnn_create(
 
 extern "C" iree_status_t iree_custom_module_cudnn_register_types(
     iree_vm_instance_t* instance) {
-  IREE_RETURN_IF_ERROR(RegisterType<CuDNNTensor>(instance, "cudnn.tensor",
+  IREE_RETURN_IF_ERROR(RegisterType<CudnnTensor>(instance, "cudnn.tensor",
                                                  &cudnn_tensor_registration));
-  IREE_RETURN_IF_ERROR(RegisterType<CuDNNOperationGraph>(
+  IREE_RETURN_IF_ERROR(RegisterType<CudnnOperationGraph>(
       instance, "cudnn.operation_graph", &cudnn_operation_graph_registration));
-  IREE_RETURN_IF_ERROR(RegisterType<CuDNNExecutable>(
+  IREE_RETURN_IF_ERROR(RegisterType<CudnnExecutable>(
       instance, "cudnn.executable", &cudnn_executable_registration));
   return iree_ok_status();
 }

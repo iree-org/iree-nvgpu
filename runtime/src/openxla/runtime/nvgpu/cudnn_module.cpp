@@ -12,6 +12,7 @@
 #include <iree/base/status.h>
 #include <iree/base/status_cc.h>
 #include <iree/hal/buffer.h>
+#include <iree/hal/channel.h>
 #include <iree/hal/drivers/cuda/api.h>
 #include <iree/hal/drivers/cuda/dynamic_symbols.h>
 #include <iree/hal/drivers/cuda/status_util.h>
@@ -88,9 +89,9 @@ class CudnnModuleState {
   static constexpr int64_t kAlignment = 32;
 
  public:
-  CudnnModuleState(iree_hal_device_t* device, iree_allocator_t host_allocator,
-                   iree_hal_cuda_dynamic_symbols_t cuda_syms,
-                   openxla_cudnn_dynamic_symbols_t syms, cudnnHandle_t handle);
+  CudnnModuleState(iree_allocator_t host_allocator,
+                   iree_hal_cuda_dynamic_symbols_t* cuda_syms,
+                   openxla_cudnn_dynamic_symbols_t* syms);
   ~CudnnModuleState();
 
   enum class TensorFormat { kRowMajor, kChannelsLast };
@@ -100,9 +101,13 @@ class CudnnModuleState {
   StatusOr<vm::ref<CudnnTensor>> TensorCreate(
       int64_t dtype, std::array<int64_t, rank> dimensions);
 
+  // Creates a cuDNN module handle from a HAL device.
+  StatusOr<vm::ref<CudnnHandle>> Handle(
+      const vm::ref<iree_hal_device_t> device);
+
   // Creates a cuDNN operation graph computing `tensor` result.
   StatusOr<vm::ref<CudnnOperationGraph>> OperationGraphCreate(
-      const vm::ref<CudnnTensor> tensor);
+      const vm::ref<CudnnHandle> handle, const vm::ref<CudnnTensor> tensor);
 
   // Creates a cuDNN executable from the given operation graph.
   StatusOr<vm::ref<CudnnExecutable>> Executable(
@@ -161,35 +166,21 @@ class CudnnModuleState {
   CudnnModuleState(const CudnnModuleState&) = delete;
   CudnnModuleState& operator=(const CudnnModuleState&) = delete;
 
-  iree_hal_device_t* device_;
   iree_allocator_t host_allocator_;
 
-  iree_hal_cuda_dynamic_symbols_t cuda_syms_;
-  openxla_cudnn_dynamic_symbols_t syms_;
-
-  // IREE custom module state must be thread-compatible, and access to the same
-  // state object will be synchronized by the caller, so we can safely access
-  // cuDNN handle without any additional synchronization.
-  cudnnHandle_t handle_;
+  iree_hal_cuda_dynamic_symbols_t* cuda_syms_;
+  openxla_cudnn_dynamic_symbols_t* syms_;
 
   // We use automatic uid assignment for all cuDNN tensors in the graph.
   uint64_t uid_ = 0;
 };
 
-CudnnModuleState::CudnnModuleState(iree_hal_device_t* device,
-                                   iree_allocator_t host_allocator,
-                                   iree_hal_cuda_dynamic_symbols_t cuda_syms,
-                                   openxla_cudnn_dynamic_symbols_t syms,
-                                   cudnnHandle_t handle)
-    : device_(device),
-      host_allocator_(host_allocator),
-      cuda_syms_(cuda_syms),
-      syms_(syms),
-      handle_(handle) {}
+CudnnModuleState::CudnnModuleState(iree_allocator_t host_allocator,
+                                   iree_hal_cuda_dynamic_symbols_t* cuda_syms,
+                                   openxla_cudnn_dynamic_symbols_t* syms)
+    : host_allocator_(host_allocator), cuda_syms_(cuda_syms), syms_(syms) {}
 
-CudnnModuleState::~CudnnModuleState() {
-  CUDNN_STATUS_CHECK_OK(&syms_, cudnnDestroy(handle_));
-}
+CudnnModuleState::~CudnnModuleState() {}
 
 static StatusOr<cudnnDataType_t> ToCudnnDataType(int64_t dtype) {
   if (dtype < CUDNN_DATA_FLOAT || dtype > CUDNN_DATA_BOOLEAN)
@@ -208,7 +199,7 @@ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::TensorCreate(
     int64_t dtype, std::array<int64_t, rank> dimensions) {
   IREE_ASSIGN_OR_RETURN(cudnnDataType_t data_type, ToCudnnDataType(dtype));
   std::array<int64_t, rank> strides = Layout::strides(dimensions);
-  return CreateTensor(&syms_, dimensions, strides, uid_++, data_type,
+  return CreateTensor(syms_, dimensions, strides, uid_++, data_type,
                       kAlignment);
 }
 
@@ -228,14 +219,14 @@ Status CudnnModuleState::PrintGraphDebug(
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseRelu(
     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
     int64_t uid, int64_t alignment, int32_t is_virtual) {
-  return CreatePointwiseRelu(&syms_, *input, lower_clip, upper_clip, uid,
+  return CreatePointwiseRelu(syms_, *input, lower_clip, upper_clip, uid,
                              alignment, is_virtual);
 }
 
 template <cudnnPointwiseMode_t mode>
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseUnary(
     const vm::ref<CudnnTensor> x, float alpha, int32_t is_virtual) {
-  return CreatePointwiseUnary(&syms_, mode, *x, alpha, uid_++, kAlignment,
+  return CreatePointwiseUnary(syms_, mode, *x, alpha, uid_++, kAlignment,
                               is_virtual);
 }
 
@@ -243,14 +234,14 @@ template <cudnnPointwiseMode_t mode>
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseBinary(
     const vm::ref<CudnnTensor> x, float alpha, const vm::ref<CudnnTensor> b,
     float alpha2, int32_t is_virtual) {
-  return CreatePointwiseBinary(&syms_, mode, *x, alpha, *b, alpha2, uid_++,
+  return CreatePointwiseBinary(syms_, mode, *x, alpha, *b, alpha2, uid_++,
                                kAlignment, is_virtual);
 }
 
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Bias(
     const vm::ref<CudnnTensor> x, const vm::ref<CudnnTensor> b,
     int32_t is_virtual) {
-  return CreatePointwiseBinary(&syms_, CUDNN_POINTWISE_ADD, *x, 1.0, *b, 1.0,
+  return CreatePointwiseBinary(syms_, CUDNN_POINTWISE_ADD, *x, 1.0, *b, 1.0,
                                uid_++, kAlignment, is_virtual);
 }
 
@@ -264,18 +255,23 @@ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Convolution(
     int32_t mode) {
   IREE_ASSIGN_OR_RETURN(cudnnConvolutionMode_t conv_mode,
                         ToCudnnConvolutionMode(mode));
-  return CreateConvolution(&syms_, *x, *w, uid_++, kAlignment, is_virtual,
+  return CreateConvolution(syms_, *x, *w, uid_++, kAlignment, is_virtual,
                            conv_mode);
 }
 
+StatusOr<vm::ref<CudnnHandle>> CudnnModuleState::Handle(
+    const vm::ref<iree_hal_device_t> device) {
+  return CreateHandle(syms_, device.get());
+}
+
 StatusOr<vm::ref<CudnnOperationGraph>> CudnnModuleState::OperationGraphCreate(
-    const vm::ref<CudnnTensor> tensor) {
-  return CreateOperationGraph(&syms_, handle_, {tensor.get()});
+    const vm::ref<CudnnHandle> handle, const vm::ref<CudnnTensor> tensor) {
+  return CreateOperationGraph(syms_, *handle, {tensor.get()});
 }
 
 StatusOr<vm::ref<CudnnExecutable>> CudnnModuleState::Executable(
     const vm::ref<CudnnOperationGraph> graph) {
-  return CreateExecutable(&syms_, handle_, *graph);
+  return CreateExecutable(syms_, *graph);
 }
 
 template <size_t n>
@@ -290,6 +286,8 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
   // Tensors required for running single convolution operation.
   const cudnn_frontend::Tensor& output = rets[0]->tensor();
 
+  iree_hal_device_t* device = executable->device();
+
   // Allocate buffer for tensor output.
   iree_hal_buffer_params_t output_buffer_params = {
       /*.usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT | IREE_HAL_BUFFER_USAGE_MAPPING,
@@ -301,7 +299,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
   };
 
   vm::ref<iree_hal_semaphore_t> semaphore;
-  IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(device_, 0, &semaphore));
+  IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(device, 0, &semaphore));
   vm::ref<iree_hal_fence_t> alloca_fence;
   IREE_RETURN_IF_ERROR(iree_hal_fence_create_at(
       semaphore.get(), 1, host_allocator_, &alloca_fence));
@@ -312,7 +310,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
 
   vm::ref<iree_hal_buffer_t> output_buffer;
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
-      device_, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
+      device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
       iree_hal_fence_semaphore_list(alloca_fence.get()),
       IREE_HAL_ALLOCATOR_POOL_DEFAULT, output_buffer_params, output_byte_length,
       &output_buffer));
@@ -329,7 +327,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
   buffers.back() = output_buffer.get();
 
   // TODO(ezhulenev): Allocate workspace required for running executable.
-  IREE_RETURN_IF_ERROR(executable->Execute(handle_, buffers));
+  IREE_RETURN_IF_ERROR(executable->Execute(buffers));
 
   // Wrap the buffer in a buffer view that provides the metadata for
   // runtime verification.
@@ -355,6 +353,9 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
     // Create cuDNN tensors
     MakeNativeFunction("tensor.create.4d", &State::TensorCreate<4>),
     MakeNativeFunction("tensor.create.4d.nhwc", &State::TensorCreate<4, NHWC>),
+
+    // cuDNN handle operations
+    MakeNativeFunction("handle", &State::Handle),
 
     // cuDNN operation graph construction
     MakeNativeFunction("operation_graph.create", &State::OperationGraphCreate),
@@ -398,8 +399,7 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
 
 class CudnnModule final : public vm::NativeModule<CudnnModuleState> {
  public:
-  CudnnModule(iree_vm_instance_t* instance, iree_hal_device_t* device,
-              iree_allocator_t host_allocator, CUcontext cuda_ctx);
+  CudnnModule(iree_vm_instance_t* instance, iree_allocator_t host_allocator);
 
   StatusOr<std::unique_ptr<CudnnModuleState>> CreateState(
       iree_allocator_t host_allocator) override;
@@ -409,43 +409,30 @@ class CudnnModule final : public vm::NativeModule<CudnnModuleState> {
 
   using NativeModule = vm::NativeModule<CudnnModuleState>;
 
-  // Retain a reference to the HAL (CUDA) device to keep CUDA context wrapper
-  // alive for the duration of cuDNN module lifetime.
-  vm::ref<iree_hal_device_t> device_;
+  iree_hal_cuda_dynamic_symbols_t cuda_syms_;
+  iree_status_t cuda_syms_status_;
 
-  // CUDA context bound to the instance of a HAL CUDA device.
-  CUcontext cuda_ctx_;
+  openxla_cudnn_dynamic_symbols_t syms_;
+  iree_status_t syms_status_;
 };
 
 CudnnModule::CudnnModule(iree_vm_instance_t* instance,
-                         iree_hal_device_t* device,
-                         iree_allocator_t host_allocator, CUcontext cuda_ctx)
+                         iree_allocator_t host_allocator)
     : NativeModule("cudnn", CudnnModule::kVersion, instance, host_allocator,
-                   {kCudnnModuleFunctions}),
-      device_(vm::retain_ref(device)),
-      cuda_ctx_(cuda_ctx) {}
+                   {kCudnnModuleFunctions}) {
+  // Load CUDA and cuDNN libraries and resolve API symbols.
+  cuda_syms_status_ =
+      iree_hal_cuda_dynamic_symbols_initialize(host_allocator, &cuda_syms_);
+  syms_status_ =
+      openxla_cudnn_dynamic_symbols_initialize(host_allocator, &syms_);
+}
 
 StatusOr<std::unique_ptr<CudnnModuleState>> CudnnModule::CreateState(
     iree_allocator_t host_allocator) {
-  // Load CUDA and resolbe API symbols.
-  iree_hal_cuda_dynamic_symbols_t cuda_syms;
-  IREE_RETURN_IF_ERROR(
-      iree_hal_cuda_dynamic_symbols_initialize(host_allocator, &cuda_syms));
-
-  // Load cuDNN library and resolve API symbols.
-  openxla_cudnn_dynamic_symbols_t syms;
-  IREE_RETURN_IF_ERROR(
-      openxla_cudnn_dynamic_symbols_initialize(host_allocator, &syms));
-
-  // Create a cuDNN handle for the new state object.
-  cudnnHandle_t handle;
-  // TODO: We must guarantee that `cuda_ctx_` is current when we create cuDNN
-  // handle. Currently we rely on implicit guarantee that module is loaded
-  // immediately after device is created, however it might not always be true?
-  CUDNN_RETURN_IF_ERROR(&syms, cudnnCreate(&handle), "cudnnCreate");
-
-  return std::make_unique<CudnnModuleState>(device_.get(), host_allocator,
-                                            cuda_syms, syms, handle);
+  IREE_RETURN_IF_ERROR(cuda_syms_status_);
+  IREE_RETURN_IF_ERROR(syms_status_);
+  return std::make_unique<CudnnModuleState>(host_allocator, &cuda_syms_,
+                                            &syms_);
 }
 
 }  // namespace openxla::runtime::nvgpu
@@ -475,10 +462,7 @@ extern "C" iree_status_t iree_custom_module_cudnn_create(
     iree_allocator_t host_allocator, iree_vm_module_t** out_module) {
   IREE_ASSERT_ARGUMENT(out_module);
 
-  CUcontext cuda_ctx;
-  IREE_RETURN_IF_ERROR(iree_hal_cuda_device_get_context(device, &cuda_ctx));
-  auto module =
-      std::make_unique<CudnnModule>(instance, device, host_allocator, cuda_ctx);
+  auto module = std::make_unique<CudnnModule>(instance, host_allocator);
   *out_module = module.release()->interface();
 
   return iree_ok_status();
@@ -488,6 +472,8 @@ extern "C" iree_status_t iree_custom_module_cudnn_register_types(
     iree_vm_instance_t* instance) {
   IREE_RETURN_IF_ERROR(RegisterType<CudnnTensor>(instance, "cudnn.tensor",
                                                  &cudnn_tensor_registration));
+  IREE_RETURN_IF_ERROR(RegisterType<CudnnHandle>(instance, "cudnn.handle",
+                                                 &cudnn_handle_registration));
   IREE_RETURN_IF_ERROR(RegisterType<CudnnOperationGraph>(
       instance, "cudnn.operation_graph", &cudnn_operation_graph_registration));
   IREE_RETURN_IF_ERROR(RegisterType<CudnnExecutable>(

@@ -49,10 +49,6 @@ class CudnnAPI {
                                        ModuleOp module, int64_t rank,
                                        std::optional<Layout> layout);
 
-  // Imports `@cudnn.operation_graph.create` into the module.
-  func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
-                                               ModuleOp module);
-
   // Imports pointwise unary `@cudnn.{op}` into the module.
   func::FuncOp getPointwiseUnaryFunction(PatternRewriter &rewriter,
                                          ModuleOp module, std::string_view op);
@@ -67,6 +63,13 @@ class CudnnAPI {
   // Imports `@cudnn.convolution` into the module.
   func::FuncOp getConvolutionFunction(PatternRewriter &rewriter,
                                       ModuleOp module, int64_t spatial_dims);
+
+  // Imports `@cudnn.handle` into the module.
+  func::FuncOp getHandleFunction(PatternRewriter &rewriter, ModuleOp module);
+
+  // Imports `@cudnn.operation_graph.create` into the module.
+  func::FuncOp getOperationGraphCreateFunction(PatternRewriter &rewriter,
+                                               ModuleOp module);
 
   // Imports `@cudnn.executable.create` into the module.
   func::FuncOp getExecutableCreateFunction(PatternRewriter &rewriter,
@@ -116,16 +119,6 @@ func::FuncOp CudnnAPI::getTensorCreateFunction(PatternRewriter &rewriter,
 
   return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
                  function_type);
-}
-
-func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
-    PatternRewriter &rewriter, ModuleOp module) {
-  MLIRContext *ctx = module->getContext();
-  SmallVector<Type> args = {cudnn::TensorType::get(ctx)};
-  SmallVector<Type> rets = {cudnn::OperationGraphType::get(ctx)};
-  auto function_type = FunctionType::get(ctx, args, rets);
-  auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
-  return addDecl(rewriter, module, function_name, function_type);
 }
 
 func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
@@ -199,6 +192,26 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
                  function_type);
 }
 
+func::FuncOp CudnnAPI::getHandleFunction(PatternRewriter &rewriter,
+                                         ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  SmallVector<Type> args = {IREE::HAL::DeviceType::get(ctx)};
+  SmallVector<Type> rets = {HandleType::get(ctx)};
+  auto function_type = FunctionType::get(ctx, args, rets);
+  auto function_name = StringAttr::get(ctx, "cudnn.handle");
+  return addDecl(rewriter, module, function_name, function_type);
+}
+
+func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
+    PatternRewriter &rewriter, ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  SmallVector<Type> args = {HandleType::get(ctx), cudnn::TensorType::get(ctx)};
+  SmallVector<Type> rets = {cudnn::OperationGraphType::get(ctx)};
+  auto function_type = FunctionType::get(ctx, args, rets);
+  auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
+  return addDecl(rewriter, module, function_name, function_type);
+}
+
 func::FuncOp CudnnAPI::getExecutableCreateFunction(PatternRewriter &rewriter,
                                                    ModuleOp module) {
   MLIRContext *ctx = module->getContext();
@@ -261,6 +274,26 @@ static bool IsVirtual(TypedValue<cudnn::TensorType> tensor) {
 }
 
 //===----------------------------------------------------------------------===//
+// cudnn.handle
+//===----------------------------------------------------------------------===//
+
+struct ConvertCudnnHandleOp : public CudnnOpConversionPattern<HandleOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      HandleOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+
+    auto fn =
+        this->api->getHandleFunction(rewriter, op->getParentOfType<ModuleOp>());
+    rewriter.replaceOpWithNewOp<func::CallOp>(
+        op, fn.getSymName(), HandleType::get(ctx), adaptor.getOperands());
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // cudnn.graph
 //===----------------------------------------------------------------------===//
 
@@ -281,7 +314,8 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
     b.setInsertionPoint(op);
     auto builder = b.create<func::FuncOp>(
         StringAttr::get(ctx, llvm::formatv("{0}.builder", op.getName())),
-        FunctionType::get(ctx, {}, {OperationGraphType::get(ctx)}));
+        FunctionType::get(ctx, {HandleType::get(ctx)},
+                          {OperationGraphType::get(ctx)}));
 
     Block *body = builder.addEntryBlock();
     b.setInsertionPointToStart(body);
@@ -323,7 +357,6 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
                                mappedArgs);
 
     rewriter.eraseOp(op);
-
     return success();
   }
 };
@@ -351,7 +384,7 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
 
     // Call a builder function to get an operation graph.
     auto operationGraph = b.create<func::CallOp>(
-        builder.getSymName(), OperationGraphType::get(ctx), ValueRange());
+        builder.getSymName(), OperationGraphType::get(ctx), op.getHandle());
 
     // Build an executable from the operation graph.
     auto executableCreate = api->getExecutableCreateFunction(rewriter, module);
@@ -371,7 +404,7 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
 
     // Call execute function with executable and buffer arguments.
     auto execute =
-        api->getExecuteFunction(rewriter, module, op->getNumOperands());
+        api->getExecuteFunction(rewriter, module, op.getArguments().size());
     auto executed =
         b.create<func::CallOp>(execute.getSymName(), bufferView, args);
 
@@ -399,11 +432,16 @@ struct ConvertCudnnReturnOp : public CudnnOpConversionPattern<cudnn::ReturnOp> {
 
     ModuleOp module = op->getParentOfType<ModuleOp>();
 
+    // Get the cuDNN handle from the parent block. We rely on the fact that
+    // parent graph operation was converted earlier.
+    SmallVector<Value> args = {op->getBlock()->getArgument(0)};
+    args.append(adaptor.getOperands().begin(), adaptor.getOperands().end());
+    assert(args[0].getType().isa<HandleType>() && "expected cuDNN handle type");
+
     // Create an operation graph from the returned tensor results.
-    auto createOpGraph = api->getOperationGraphCreateFunction(rewriter, module);
-    auto opGraph = b.create<func::CallOp>(createOpGraph.getSymName(),
-                                          OperationGraphType::get(ctx),
-                                          adaptor.getOperands());
+    auto opGraphCreate = api->getOperationGraphCreateFunction(rewriter, module);
+    auto opGraph = b.create<func::CallOp>(opGraphCreate.getSymName(),
+                                          OperationGraphType::get(ctx), args);
     b.create<func::ReturnOp>(opGraph->getResults());
 
     rewriter.eraseOp(op);
@@ -604,6 +642,7 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   // High level cuDNN library integration operations
   //===--------------------------------------------------------------------===//
 
+  patterns.insert<ConvertCudnnHandleOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnGraphOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnReturnOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnCallOp>(typeConverter, ctx, api);

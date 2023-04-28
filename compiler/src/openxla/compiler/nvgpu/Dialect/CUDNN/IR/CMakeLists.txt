@@ -36,6 +36,7 @@ iree_cc_library(
     LLVMSupport
     MLIRIR
     MLIRSupport
+    iree::compiler::Dialect::HAL::IR
     openxla::compiler::nvgpu::defs
   PUBLIC
 )
@@ -46,8 +47,8 @@ iree_tablegen_library(
   TD_FILE
     "CUDNNOps.td"
   OUTS
-    --gen-dialect-decls CUDNNDialect.h.inc
-    --gen-dialect-defs CUDNNDialect.cpp.inc
+    --gen-dialect-decls --dialect=cudnn CUDNNDialect.h.inc
+    --gen-dialect-defs --dialect=cudnn CUDNNDialect.cpp.inc
     --gen-op-decls CUDNNOps.h.inc
     --gen-op-defs CUDNNOps.cpp.inc
 )

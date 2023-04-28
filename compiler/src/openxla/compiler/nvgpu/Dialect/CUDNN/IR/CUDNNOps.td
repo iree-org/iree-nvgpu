@@ -9,6 +9,7 @@
 #ifndef CUDNN_OPS
 #define CUDNN_OPS
 
+include "iree/compiler/Dialect/HAL/IR/HALBase.td"
 include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.td"
 include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.td"
 include "mlir/IR/OpBase.td"
@@ -313,6 +314,33 @@ def CUDNN_ReturnOp : CUDNN_Op<"return", [
 }
 
 //===----------------------------------------------------------------------===//
+// cudnn.handle operation
+//===----------------------------------------------------------------------===//
+
+def CUDNN_HandleOp : CUDNN_Op<"handle", [Pure]> {
+  let summary = "Returns a cuDNN handle for the given device";
+
+  let arguments = (ins
+    HAL_Device:$device
+  );
+
+  let results = (outs
+    CUDNN_HandleType:$result
+  );
+
+  let assemblyFormat = [{
+    `(` $device `)` attr-dict `:` type($result)
+  }];
+
+  let builders = [
+    OpBuilder<(ins),
+    [{
+      $_state.addTypes({HandleType::get($_builder.getContext())});
+    }]>,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // cudnn.call operation
 //===----------------------------------------------------------------------===//
 
@@ -323,11 +351,12 @@ def CUDNN_CallOp : CUDNN_Op<"call", [
   let summary = "cuDNN call operation";
 
   let description = [{
-    Calls a cuDNN graph with the given arguments.
+    Calls a cuDNN graph with the given cuDNN handle and arguments.
   }];
 
   let arguments = (ins
     CUDNN_GraphRefAttr:$callee,
+    CUDNN_HandleType:$handle,
     Variadic<AnyRankedTensor>:$arguments
   );
 
@@ -336,7 +365,9 @@ def CUDNN_CallOp : CUDNN_Op<"call", [
   );
 
   let assemblyFormat = [{
-    $callee `(` operands `)` attr-dict `:` functional-type(operands, results)
+    `handle` `(` $handle `)` $callee `(` $arguments `)`
+       attr-dict `:`
+       functional-type($arguments, $results)
   }];
 
   let extraClassDeclaration = [{

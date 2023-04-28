@@ -6,6 +6,7 @@
 
 #include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
 
+#include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -17,13 +18,15 @@
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "stablehlo/dialect/StablehloOps.h"
 
-using namespace mlir;
-
 namespace openxla::compiler::nvgpu::cudnn {
+
+using namespace mlir;
+using namespace mlir::iree_compiler;
 
 static TensorType getCudnnTensorType(mlir::TensorType tensor_type) {
   return TensorType::get(tensor_type.getShape(), tensor_type.getElementType());
 }
+
 static FailureOr<Layout> getCudnnTensorLayout(int64_t batch_dim,
                                               int64_t feature_dim) {
   if (batch_dim != 0) return failure();
@@ -96,9 +99,11 @@ static LogicalResult outlineToGraph(
 
   // Replace root with cudnn.call op.
   rewriter.setInsertionPoint(root);
+  auto device = rewriter.create<IREE::HAL::ExSharedDeviceOp>(root->getLoc());
+  auto handle = rewriter.create<HandleOp>(root->getLoc(), device.getResult());
   rewriter.replaceOpWithNewOp<CallOp>(
-      root, result.getType(), graph.getName(),
-      ArrayRef<Value>(arguments.data(), arguments.size()));
+      root, result.getType(), graph.getName(), handle,
+      ArrayRef<Value>(arguments.begin(), arguments.size()));
 
   return success();
 }

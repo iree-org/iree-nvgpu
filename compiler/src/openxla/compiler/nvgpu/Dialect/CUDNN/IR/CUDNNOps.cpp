@@ -23,6 +23,7 @@
 namespace openxla::compiler::nvgpu::cudnn {
 
 using namespace mlir;
+using namespace mlir::iree_compiler;
 
 //===----------------------------------------------------------------------===//
 // cudnn.graph operation
@@ -109,9 +110,9 @@ static LogicalResult verifyTensorTypes(Diagnostic emitOpError,
                                        std::string_view kind,
                                        unsigned ordinal) {
   if (!cudnnType)
-    return emitOpError() << "unsupported graph " << kind << "#" << ordinal;
+    return emitOpError() << "unsupported graph " << kind << " #" << ordinal;
   if (!tensorType)
-    return emitOpError() << "unsupported " << kind << "#" << ordinal;
+    return emitOpError() << "unsupported " << kind << " #" << ordinal;
 
   if (cudnnType.getElementType() != tensorType.getElementType())
     return emitOpError() << kind << "#" << ordinal
@@ -157,14 +158,14 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   for (unsigned i = 0; i < graphArgs.size(); ++i) {
     auto cudnnArg = graphArgs[i].dyn_cast<cudnn::TensorType>();
-    auto tensorArg = getOperandTypes()[i].dyn_cast<RankedTensorType>();
+    auto tensorArg = getArguments()[i].getType().dyn_cast<RankedTensorType>();
     if (failed(verifyTensorTypes(emitErr, cudnnArg, tensorArg, "argument", i)))
       return failure();
   }
 
   for (unsigned i = 0; i < graphResults.size(); ++i) {
     auto cudnnRet = graphResults[i].dyn_cast<cudnn::TensorType>();
-    auto tensorRet = getResultTypes()[i].dyn_cast<RankedTensorType>();
+    auto tensorRet = getResults()[i].getType().dyn_cast<RankedTensorType>();
     if (failed(verifyTensorTypes(emitErr, cudnnRet, tensorRet, "result", i)))
       return failure();
   }

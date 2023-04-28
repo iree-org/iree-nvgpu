@@ -19,7 +19,9 @@
 #include <type_traits>
 #include <unordered_set>
 
+#include "iree/hal/drivers/cuda/cuda_device.h"
 #include "openxla/runtime/nvgpu/cudnn_stub.h"
+#include "openxla/runtime/nvgpu/status_util.h"
 
 namespace openxla::runtime::nvgpu {
 
@@ -88,14 +90,33 @@ const cudnn_frontend::Tensor& CudnnOpResultTensor::tensor() const {
 }
 
 //===----------------------------------------------------------------------===//
+// CudnnHandle
+//===----------------------------------------------------------------------===//
+
+CudnnHandle::CudnnHandle(openxla_cudnn_dynamic_symbols_t* syms,
+                         vm::ref<iree_hal_device_t> device,
+                         cudnnHandle_t handle)
+    : syms_(syms), device_(std::move(device)), handle_(handle) {}
+
+CudnnHandle::~CudnnHandle() {
+  ScopedCudnnStubs stubs(syms_);
+  CUDNN_STATUS_CHECK_OK(syms_, cudnnDestroy(handle_), "cudnnDestroy");
+}
+
+cudnnHandle_t CudnnHandle::handle() const { return handle_; }
+
+iree_hal_device_t* CudnnHandle::device() const { return device_.get(); }
+
+//===----------------------------------------------------------------------===//
 // CudnnOperationGraph
 //===----------------------------------------------------------------------===//
 
 CudnnOperationGraph::CudnnOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
+                                         CudnnHandle& handle,
                                          cudnn_frontend::OperationGraph graph,
                                          span<CudnnTensor* const> args,
                                          span<CudnnTensor* const> rets)
-    : syms_(syms), graph_(std::move(graph)) {
+    : syms_(syms), handle_(vm::retain_ref(&handle)), graph_(std::move(graph)) {
   for (auto* arg : args) {
     args_.push_back(vm::retain_ref(arg));
     uids_.push_back(arg->tensor().getId());
@@ -123,6 +144,12 @@ std::vector<CudnnTensor*> CudnnOperationGraph::rets() const {
 
 iree::span<const int64_t> CudnnOperationGraph::uids() const { return uids_; }
 
+cudnnHandle_t CudnnOperationGraph::handle() const { return handle_->handle(); }
+
+iree_hal_device_t* CudnnOperationGraph::device() const {
+  return handle_->device();
+}
+
 //===----------------------------------------------------------------------===//
 // CudnnExecutable
 //===----------------------------------------------------------------------===//
@@ -141,6 +168,10 @@ CudnnExecutable::~CudnnExecutable() {
 
 const CudnnOperationGraph& CudnnExecutable::graph() const { return *graph_; }
 
+cudnnHandle_t CudnnExecutable::handle() const { return graph_->handle(); }
+
+iree_hal_device_t* CudnnExecutable::device() const { return graph_->device(); }
+
 // Converts IREE HAL buffers to CUDA device pointers.
 static std::vector<CUdeviceptr> GetDevicePointers(
     span<iree_hal_buffer_t* const> buffers) {
@@ -156,8 +187,7 @@ static std::vector<CUdeviceptr> GetDevicePointers(
   return ptrs;
 }
 
-Status CudnnExecutable::Execute(cudnnHandle_t handle,
-                                span<iree_hal_buffer_t* const> buffers) {
+Status CudnnExecutable::Execute(span<iree_hal_buffer_t* const> buffers) {
   ScopedCudnnStubs stubs(syms_);
 
   // Check that we have a buffer for every argument and result tensor.
@@ -187,7 +217,7 @@ Status CudnnExecutable::Execute(cudnnHandle_t handle,
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms_, pack.get_status()));
 
   CUDNN_RETURN_IF_ERROR(syms_,
-                        cudnnBackendExecute(handle, plans_[0].get_raw_desc(),
+                        cudnnBackendExecute(handle(), plans_[0].get_raw_desc(),
                                             pack.get_raw_desc()),
                         "cudnnBackendExecute()");
 
@@ -449,6 +479,26 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
 }
 
 //===----------------------------------------------------------------------===//
+// CreateHandle
+//===----------------------------------------------------------------------===//
+
+StatusOr<vm::ref<CudnnHandle>> CreateHandle(
+    openxla_cudnn_dynamic_symbols_t* syms, iree_hal_device_t* device) {
+  cudnnHandle_t handle = {0};
+
+  // Check if device is a CUDA HAL device.
+  CUcontext ctx;
+  IREE_RETURN_IF_ERROR(iree_hal_cuda_device_get_context(device, &ctx));
+
+  // TODO: We must guarantee that `ctx` is current when we create cuDNN
+  // handle. Currently we rely on implicit guarantee that module is loaded
+  // immediately after device is created, however it might not always be true?
+  CUDNN_RETURN_IF_ERROR(syms, cudnnCreate(&handle), "cudnnCreate");
+
+  return vm::make_ref<CudnnHandle>(syms, vm::retain_ref(device), handle);
+}
+
+//===----------------------------------------------------------------------===//
 // CreateOperationGraph
 //===----------------------------------------------------------------------===//
 
@@ -458,7 +508,7 @@ static To* DynCast(CudnnTensor* tensor) {
 }
 
 StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnHandle& handle,
     span<CudnnTensor* const> rets) {
   ScopedCudnnStubs stubs(syms);
 
@@ -496,7 +546,7 @@ StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
 
   // Construct a cudnn_frontend operation graph.
   auto graph = cudnn_frontend::OperationGraphBuilder()
-                   .setHandle(handle)
+                   .setHandle(handle.handle())
                    .setOperationGraph(ops.size(), ops.data())
                    .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, graph.get_status()));
@@ -509,8 +559,8 @@ StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
               return a->tensor().getId() < b->tensor().getId();
             });
 
-  return vm::ref<CudnnOperationGraph>(
-      new CudnnOperationGraph(syms, std::move(graph), unique_args, rets));
+  return vm::ref<CudnnOperationGraph>(new CudnnOperationGraph(
+      syms, handle, std::move(graph), unique_args, rets));
 }
 
 //===----------------------------------------------------------------------===//
@@ -523,8 +573,7 @@ StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
 static bool AcceptAllGraphs(cudnnBackendDescriptor_t) { return false; }
 
 iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnHandle_t handle,
-    CudnnOperationGraph& graph) {
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph) {
   ScopedCudnnStubs stubs(syms);
 
   // Collect supported engine configs.
@@ -547,7 +596,7 @@ iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
   for (auto config : configs) {
     cudnn_frontend::ExecutionPlan plan =
         cudnn_frontend::ExecutionPlanBuilder()
-            .setHandle(handle)
+            .setHandle(graph.handle())
             .setEngineConfig(config, graph.graph().getTag())
             .build();
 
@@ -605,6 +654,8 @@ std::vector<int64_t> GetChannelsLastStrides(span<const int64_t> dims) {
 
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_tensor,
                              openxla::runtime::nvgpu::CudnnTensor);
+IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_handle,
+                             openxla::runtime::nvgpu::CudnnHandle);
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_operation_graph,
                              openxla::runtime::nvgpu::CudnnOperationGraph);
 IREE_VM_DEFINE_TYPE_ADAPTERS(cudnn_executable,

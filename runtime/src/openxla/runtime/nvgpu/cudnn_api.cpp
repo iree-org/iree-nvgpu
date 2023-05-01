@@ -487,13 +487,17 @@ StatusOr<vm::ref<CudnnHandle>> CreateHandle(
   IREE_ASSERT_ARGUMENT(device);
   cudnnHandle_t handle = {0};
 
-  // Check if device is a CUDA HAL device.
-  CUcontext ctx;
-  IREE_RETURN_IF_ERROR(iree_hal_cuda_device_get_context(device, &ctx));
+  if (!iree_hal_cuda_device_isa(device))
+    return iree_make_status(
+        IREE_STATUS_INVALID_ARGUMENT,
+        "HAL device must be a CUDA device to create cuDNN handle");
 
+  CUcontext ctx = iree_hal_cuda_device_context(device);
   // TODO: We must guarantee that `ctx` is current when we create cuDNN
   // handle. Currently we rely on implicit guarantee that module is loaded
   // immediately after device is created, however it might not always be true?
+  (void)ctx;  // Use something like `ScopedActivateContext` from XLA.
+
   CUDNN_RETURN_IF_ERROR(syms, cudnnCreate(&handle), "cudnnCreate");
 
   return vm::make_ref<CudnnHandle>(syms, vm::retain_ref(device), handle);

@@ -484,6 +484,7 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
 
 StatusOr<vm::ref<CudnnHandle>> CreateHandle(
     openxla_cudnn_dynamic_symbols_t* syms, iree_hal_device_t* device) {
+  IREE_ASSERT_ARGUMENT(device);
   cudnnHandle_t handle = {0};
 
   // Check if device is a CUDA HAL device.

@@ -26,8 +26,22 @@ iree_cc_library(
     ::defs
     ::dynamic_symbols
     ::cudnn_api
-    iree::runtime
   PUBLIC
+)
+
+iree_cc_library(
+  NAME
+    cudnn_module_dylib
+  HDRS
+    "cudnn_module.h"
+  SRCS
+    "cudnn_module.cpp"
+  DEPS
+    ::defs
+    ::dynamic_symbols
+    ::cudnn_api
+  PUBLIC
+  SHARED
 )
 
 iree_cc_library(
@@ -42,6 +56,7 @@ iree_cc_library(
     ::dynamic_symbols
     ::cudnn_stub
     cudnn_frontend
+    iree::hal::drivers::cuda
     iree::vm
   PUBLIC
 )

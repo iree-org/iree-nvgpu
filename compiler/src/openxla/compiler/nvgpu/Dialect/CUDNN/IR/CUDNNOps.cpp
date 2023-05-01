@@ -48,17 +48,17 @@ void GraphOp::print(OpAsmPrinter &p) {
 
 LogicalResult GraphOp::verifyType() {
   // Check if type is a legal cuDNN tensor type.
-  auto is_cudnn_tensor = [](Type type) {
+  auto isCudnnTensor = [](Type type) {
     if (auto tensor = type.dyn_cast<CudnnTensorType>())
       return !tensor.isOpaque();
     return false;
   };
 
   // All arguments and results must be cuDNN tensors.
-  if (!llvm::all_of(getArgumentTypes(), is_cudnn_tensor))
+  if (!llvm::all_of(getArgumentTypes(), isCudnnTensor))
     return emitOpError("requires all arguments to be non-opaque cuDNN tensors");
 
-  if (!llvm::all_of(getResultTypes(), is_cudnn_tensor))
+  if (!llvm::all_of(getResultTypes(), isCudnnTensor))
     return emitOpError("requires all results to be non-opaque cuDNN tensors");
 
   // cuDNN graph must return exactly one result.

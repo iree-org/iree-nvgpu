@@ -33,8 +33,8 @@ class ConverCudnnToRuntime
 
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) { return type; });
-    typeConverter.addConversion([](cudnn::TensorType tensor) {
-      return cudnn::TensorType::get(tensor.getContext());
+    typeConverter.addConversion([](CudnnTensorType tensor) {
+      return CudnnTensorType::get(tensor.getContext());
     });
 
     // Ensure all cuDNN dialect operations go away.

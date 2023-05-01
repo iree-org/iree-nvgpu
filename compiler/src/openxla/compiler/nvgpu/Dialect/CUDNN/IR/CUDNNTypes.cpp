@@ -67,15 +67,14 @@ void CUDNNDialect::registerAttrs() {
 
 namespace openxla::compiler::nvgpu::cudnn {
 
-bool TensorType::isOpaque() {
+bool CudnnTensorType::isOpaque() {
   return getShape().empty() && !getElementType() && !getLayout() &&
          !getStrides();
 }
 
-LogicalResult TensorType::verify(function_ref<InFlightDiagnostic()> emitError,
-                                 ArrayRef<long> shape, Type elementType,
-                                 std::optional<Layout> layout,
-                                 AffineMap strides) {
+LogicalResult CudnnTensorType::verify(
+    function_ref<InFlightDiagnostic()> emitError, ArrayRef<long> shape,
+    Type elementType, std::optional<Layout> layout, AffineMap strides) {
   if (elementType && (shape.size() < 3 || shape.size() > 8))
     return emitError() << "cuDNN supports tensors of rank 3 to 8";
 
@@ -93,7 +92,7 @@ LogicalResult TensorType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-void TensorType::print(AsmPrinter &printer) const {
+void CudnnTensorType::print(AsmPrinter &printer) const {
   // Opaque cuDNN tensor type (`!cudnn.tensor`)
   if (!getElementType()) return;
 
@@ -108,10 +107,10 @@ void TensorType::print(AsmPrinter &printer) const {
   printer << '>';
 }
 
-Type TensorType::parse(mlir::AsmParser &parser) {
+Type CudnnTensorType::parse(mlir::AsmParser &parser) {
   // Opaque cuDNN tensor type (`!cudnn.tensor`)
   if (failed(parser.parseOptionalLess())) {
-    return TensorType::get(parser.getContext());
+    return CudnnTensorType::get(parser.getContext());
   }
 
   SmallVector<int64_t> shape;
@@ -144,12 +143,12 @@ Type TensorType::parse(mlir::AsmParser &parser) {
   if (failed(parser.parseGreater())) return Type();
 
   if (auto *layout = std::get_if<Layout>(&tensor_layout))
-    return TensorType::get(shape, elementType, *layout);
+    return CudnnTensorType::get(shape, elementType, *layout);
 
   if (auto *strides = std::get_if<AffineMap>(&tensor_layout))
-    return TensorType::get(shape, elementType, *strides);
+    return CudnnTensorType::get(shape, elementType, *strides);
 
-  return TensorType::get(shape, elementType);
+  return CudnnTensorType::get(shape, elementType);
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

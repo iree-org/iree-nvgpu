@@ -49,7 +49,7 @@ void GraphOp::print(OpAsmPrinter &p) {
 LogicalResult GraphOp::verifyType() {
   // Check if type is a legal cuDNN tensor type.
   auto is_cudnn_tensor = [](Type type) {
-    if (auto tensor = type.dyn_cast<cudnn::TensorType>())
+    if (auto tensor = type.dyn_cast<CudnnTensorType>())
       return !tensor.isOpaque();
     return false;
   };
@@ -75,7 +75,7 @@ LogicalResult GraphOp::verifyType() {
 using Diagnostic = std::function<InFlightDiagnostic()>;
 
 // Get dimensions of the tensor argument after applying cuDNN tensor layout.
-static SmallVector<int64_t> getTensorArgDims(cudnn::TensorType tensor) {
+static SmallVector<int64_t> getTensorArgDims(CudnnTensorType tensor) {
   auto dims = tensor.getShape();
 
   std::optional<Layout> layout = tensor.getLayout();
@@ -105,7 +105,7 @@ static SmallVector<int64_t> getTensorArgDims(cudnn::TensorType tensor) {
 
 // Verifies that cuDNN graph type is compatible with tensor type.
 static LogicalResult verifyTensorTypes(Diagnostic emitOpError,
-                                       cudnn::TensorType cudnnType,
+                                       CudnnTensorType cudnnType,
                                        RankedTensorType tensorType,
                                        std::string_view kind,
                                        unsigned ordinal) {
@@ -157,14 +157,14 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   Diagnostic emitErr = [&]() { return emitOpError(); };
 
   for (unsigned i = 0; i < graphArgs.size(); ++i) {
-    auto cudnnArg = graphArgs[i].dyn_cast<cudnn::TensorType>();
+    auto cudnnArg = graphArgs[i].dyn_cast<CudnnTensorType>();
     auto tensorArg = getArguments()[i].getType().dyn_cast<RankedTensorType>();
     if (failed(verifyTensorTypes(emitErr, cudnnArg, tensorArg, "argument", i)))
       return failure();
   }
 
   for (unsigned i = 0; i < graphResults.size(); ++i) {
-    auto cudnnRet = graphResults[i].dyn_cast<cudnn::TensorType>();
+    auto cudnnRet = graphResults[i].dyn_cast<CudnnTensorType>();
     auto tensorRet = getResults()[i].getType().dyn_cast<RankedTensorType>();
     if (failed(verifyTensorTypes(emitErr, cudnnRet, tensorRet, "result", i)))
       return failure();

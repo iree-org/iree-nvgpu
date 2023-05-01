@@ -68,14 +68,14 @@ iree_gentbl_cc_library(
                 "--gen-dialect-decls",
                 "--dialect=cudnn",
             ],
-            "CUDNNOpsDialect.h.inc",
+            "CUDNNDialect.h.inc",
         ),
         (
             [
                 "--gen-dialect-defs",
                 "--dialect=cudnn",
             ],
-            "CUDNNOpsDialect.cpp.inc",
+            "CUDNNDialect.cpp.inc",
         ),
         (
             ["--gen-op-decls"],

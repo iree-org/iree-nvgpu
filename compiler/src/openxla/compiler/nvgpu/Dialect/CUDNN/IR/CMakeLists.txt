@@ -20,8 +20,8 @@ iree_cc_library(
   TEXTUAL_HDRS
     "CUDNNOps.cpp.inc"
     "CUDNNOps.h.inc"
-    "CUDNNOpsDialect.cpp.inc"
-    "CUDNNOpsDialect.h.inc"
+    "CUDNNDialect.cpp.inc"
+    "CUDNNDialect.h.inc"
     "CUDNNTypes.cpp.inc"
     "CUDNNTypes.h.inc"
   SRCS

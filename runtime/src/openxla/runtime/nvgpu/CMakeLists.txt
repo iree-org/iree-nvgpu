@@ -56,7 +56,9 @@ iree_cc_library(
     ::dynamic_symbols
     ::cudnn_stub
     cudnn_frontend
+    iree::hal
     iree::hal::drivers::cuda
+    iree::modules::hal
     iree::vm
   PUBLIC
 )

@@ -23,8 +23,9 @@ namespace openxla::compiler::nvgpu::cudnn {
 using namespace mlir;
 using namespace mlir::iree_compiler;
 
-static TensorType getCudnnTensorType(mlir::TensorType tensor_type) {
-  return TensorType::get(tensor_type.getShape(), tensor_type.getElementType());
+static CudnnTensorType getCudnnTensorType(TensorType tensor_type) {
+  return CudnnTensorType::get(tensor_type.getShape(),
+                              tensor_type.getElementType());
 }
 
 static FailureOr<Layout> getCudnnTensorLayout(int64_t batch_dim,
@@ -37,10 +38,9 @@ static FailureOr<Layout> getCudnnTensorLayout(int64_t batch_dim,
 
 // Outlines all transitive ops defining 'result' into a cudnn.graph op and calls
 // it with `arguments`.
-static LogicalResult outlineToGraph(
-    TypedValue<mlir::TensorType> result,
-    ArrayRef<TypedValue<mlir::TensorType>> arguments,
-    PatternRewriter& rewriter) {
+static LogicalResult outlineToGraph(TypedValue<TensorType> result,
+                                    ArrayRef<TypedValue<TensorType>> arguments,
+                                    PatternRewriter& rewriter) {
   Operation* root = result.getDefiningOp();
   if (!root)
     return rewriter.notifyMatchFailure(result.getLoc(), "expected def by op");
@@ -66,7 +66,7 @@ static LogicalResult outlineToGraph(
 
   // Create the cudnn.graph op with an empty region.
   auto arg_types = llvm::to_vector(
-      map_range(arguments, [](TypedValue<mlir::TensorType> arg) -> Type {
+      map_range(arguments, [](TypedValue<TensorType> arg) -> Type {
         return getCudnnTensorType(arg.getType());
       }));
   FunctionType func_type =
@@ -187,9 +187,9 @@ static LogicalResult outlineConv(stablehlo::ConvolutionOp op,
   return outlineToGraph(op.getResult(), {op.getLhs(), op.getRhs()}, rewriter);
 }
 
-static Value castToCudnnTensor(TypedValue<mlir::TensorType> value,
+static Value castToCudnnTensor(TypedValue<TensorType> value,
                                PatternRewriter& rewriter) {
-  TensorType tensor_type = getCudnnTensorType(value.getType());
+  CudnnTensorType tensor_type = getCudnnTensorType(value.getType());
   auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
       value.getLoc(), tensor_type, value);
   return cast_op.getResult(0);

@@ -114,7 +114,7 @@ func::FuncOp CudnnAPI::getTensorCreateFunction(PatternRewriter &rewriter,
                                                std::optional<Layout> layout) {
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args(/*dtype*/ 1 + rank, IntegerType::get(ctx, 64));
-  SmallVector<Type> rets = {cudnn::TensorType::get(ctx)};
+  SmallVector<Type> rets = {CudnnTensorType::get(ctx)};
   auto function_type = FunctionType::get(ctx, args, rets);
 
   std::string function_name = llvm::formatv("cudnn.tensor.create.{0}d", rank);
@@ -128,7 +128,7 @@ func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
                                                  ModuleOp module,
                                                  std::string_view op) {
   MLIRContext *ctx = module->getContext();
-  auto tensor = cudnn::TensorType::get(ctx);
+  auto tensor = CudnnTensorType::get(ctx);
   auto f32 = Float32Type::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
 
@@ -144,7 +144,7 @@ func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
                                                   ModuleOp module,
                                                   std::string_view op) {
   MLIRContext *ctx = module->getContext();
-  auto tensor = cudnn::TensorType::get(ctx);
+  auto tensor = CudnnTensorType::get(ctx);
   auto f32 = Float32Type::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
 
@@ -160,7 +160,7 @@ func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
 func::FuncOp CudnnAPI::getBiasFunction(PatternRewriter &rewriter,
                                        ModuleOp module) {
   MLIRContext *ctx = module->getContext();
-  auto tensor = cudnn::TensorType::get(ctx);
+  auto tensor = CudnnTensorType::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
 
   SmallVector<Type> args = {/*x=*/tensor, /*b=*/tensor, /*is_virtual=*/i32};
@@ -175,7 +175,7 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
                                               ModuleOp module,
                                               int64_t spatial_dims) {
   MLIRContext *ctx = module->getContext();
-  auto tensor = cudnn::TensorType::get(ctx);
+  auto tensor = CudnnTensorType::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
   auto i64 = IntegerType::get(ctx, 64);
 
@@ -208,7 +208,7 @@ func::FuncOp CudnnAPI::getHandleFunction(PatternRewriter &rewriter,
 func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
     PatternRewriter &rewriter, ModuleOp module) {
   MLIRContext *ctx = module->getContext();
-  SmallVector<Type> args = {HandleType::get(ctx), cudnn::TensorType::get(ctx)};
+  SmallVector<Type> args = {HandleType::get(ctx), CudnnTensorType::get(ctx)};
   SmallVector<Type> rets = {cudnn::OperationGraphType::get(ctx)};
   auto function_type = FunctionType::get(ctx, args, rets);
   auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
@@ -271,7 +271,7 @@ static FailureOr<DataType> getDataType(Type elementType) {
 }
 
 // Returns true if value is an intermediate cuDNN tensor (virtual tensor).
-static bool IsVirtual(TypedValue<cudnn::TensorType> tensor) {
+static bool IsVirtual(TypedValue<CudnnTensorType> tensor) {
   return llvm::none_of(tensor.getUsers(),
                        [](Operation *op) { return isa<cudnn::ReturnOp>(op); });
 }
@@ -329,7 +329,7 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
 
     // Create cuDNN tensor for every graph argument.
     for (auto arg : op.getArgumentTypes()) {
-      auto tensorArg = arg.cast<cudnn::TensorType>();
+      auto tensorArg = arg.cast<CudnnTensorType>();
       auto shape = tensorArg.getShape();
 
       if (llvm::any_of(shape, [](int64_t dim) { return dim < 0; }))
@@ -352,7 +352,7 @@ struct ConvertCudnnGraphOp : public CudnnOpConversionPattern<cudnn::GraphOp> {
       auto createTensor = api->getTensorCreateFunction(
           rewriter, module, shape.size(), tensorArg.getLayout());
       auto tensor = b.create<func::CallOp>(createTensor.getSymName(),
-                                           cudnn::TensorType::get(ctx), args);
+                                           CudnnTensorType::get(ctx), args);
       mappedArgs.push_back(tensor.getResult(0));
     }
 
@@ -530,7 +530,7 @@ struct ConvertCudnnUnaryOp : public CudnnOpConversionPattern<T> {
         rewriter, op->template getParentOfType<ModuleOp>(),
         op->getName().stripDialect());
     rewriter.replaceOpWithNewOp<func::CallOp>(op, fn.getSymName(),
-                                              TensorType::get(ctx), args);
+                                              CudnnTensorType::get(ctx), args);
 
     return success();
   }
@@ -573,7 +573,7 @@ struct ConvertCudnnBinaryOp : public CudnnOpConversionPattern<T> {
         rewriter, op->template getParentOfType<ModuleOp>(),
         op->getName().stripDialect());
     rewriter.replaceOpWithNewOp<func::CallOp>(op, fn.getSymName(),
-                                              TensorType::get(ctx), args);
+                                              CudnnTensorType::get(ctx), args);
 
     return success();
   }
@@ -640,7 +640,7 @@ struct ConvertCudnnBiasOp : public CudnnOpConversionPattern<BiasOp> {
 
     auto bias = api->getBiasFunction(rewriter, op->getParentOfType<ModuleOp>());
     rewriter.replaceOpWithNewOp<func::CallOp>(op, bias.getSymName(),
-                                              TensorType::get(ctx), args);
+                                              CudnnTensorType::get(ctx), args);
 
     return success();
   }
@@ -679,7 +679,7 @@ struct ConvertCudnnConvolutionOp
     auto convolution = api->getConvolutionFunction(
         rewriter, op->getParentOfType<ModuleOp>(), op.getSpatialDimCount());
     rewriter.replaceOpWithNewOp<func::CallOp>(op, convolution.getSymName(),
-                                              TensorType::get(ctx), args);
+                                              CudnnTensorType::get(ctx), args);
 
     return success();
   }

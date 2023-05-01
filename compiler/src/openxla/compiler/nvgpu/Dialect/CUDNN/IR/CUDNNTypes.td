@@ -161,7 +161,7 @@ def CUDNN_LayoutAttr : EnumAttr<CUDNN_Dialect, CUDNN_Layout, "layout">;
 // !cudnn.tensor type
 //===----------------------------------------------------------------------===//
 
-def CUDNN_TensorType : CUDNN_Type<"Tensor", "tensor"> {
+def CUDNN_TensorType : CUDNN_Type<"CudnnTensor", "tensor"> {
     let summary = "cuDNN Tensor";
     let description = [{
       CuDNN tensor type describing memory shape, data type and layout. This type

@@ -43,6 +43,7 @@ class ConverCudnnToRuntime
     conversionTarget.addLegalDialect<func::FuncDialect>();
     conversionTarget.addLegalDialect<arith::ArithDialect>();
     conversionTarget.addLegalDialect<IREE::HAL::HALDialect>();
+    conversionTarget.addLegalDialect<IREE::Util::UtilDialect>();
 
     RewritePatternSet patterns(&getContext());
     populateCudnnToRuntimePatterns(typeConverter, patterns);

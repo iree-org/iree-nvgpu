@@ -1,5 +1,14 @@
 module @example {
 
+util.global @handle : !cudnn.handle
+
+util.initializer {
+  %device = hal.ex.shared_device : !hal.device
+  %handle = cudnn.handle(%device) : !cudnn.handle
+  util.global.store %handle, @handle : !cudnn.handle
+  util.initializer.return
+}
+
 cudnn.graph @conv2d(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
                     %w: !cudnn.tensor<32x32x1x1xf32, NHWC>,
                     %b: !cudnn.tensor<8x32x4x4xf32, NHWC>,
@@ -36,8 +45,7 @@ func.func @main() -> tensor<8x4x4x32xf32> {
   %b = util.global.load @b : tensor<8x4x4x32xf32>
   %c = util.global.load @c : tensor<1x1x1x32xf32>
 
-  %device = hal.ex.shared_device : !hal.device
-  %handle = cudnn.handle(%device) : !cudnn.handle
+  %handle = util.global.load @handle : !cudnn.handle
 
   %0 = cudnn.call handle(%handle) @conv2d(%x, %w, %b, %c)
        : (tensor<8x4x4x32xf32>, tensor<32x1x1x32xf32>,

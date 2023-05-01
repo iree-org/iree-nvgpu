@@ -52,11 +52,11 @@ static LogicalResult outlineToGraph(TypedValue<TensorType> result,
   // Collect the set of ops to clone into the region.
   SetVector<Operation*> ops;
   ops.insert(root);
-  DenseSet<Value> arg_set(arguments.begin(), arguments.end());
+  DenseSet<Value> argSet(arguments.begin(), arguments.end());
   for (size_t index = 0; index < ops.size(); ++index) {
     Operation* op = ops[index];
     for (Value operand : op->getOperands()) {
-      if (arg_set.count(operand)) continue;
+      if (argSet.count(operand)) continue;
       Operation* def = operand.getDefiningOp();
       if (!def)
         return rewriter.notifyMatchFailure(op, "expected operands def by op");
@@ -65,15 +65,15 @@ static LogicalResult outlineToGraph(TypedValue<TensorType> result,
   }
 
   // Create the cudnn.graph op with an empty region.
-  auto arg_types = llvm::to_vector(
+  auto argTypes = llvm::to_vector(
       map_range(arguments, [](TypedValue<TensorType> arg) -> Type {
         return getCudnnTensorType(arg.getType());
       }));
-  FunctionType func_type =
-      rewriter.getFunctionType(arg_types, getCudnnTensorType(result.getType()));
+  FunctionType funcType =
+      rewriter.getFunctionType(argTypes, getCudnnTensorType(result.getType()));
   OpBuilder::InsertionGuard guard(rewriter);
   rewriter.setInsertionPoint(func);
-  GraphOp graph = rewriter.create<GraphOp>(root->getLoc(), func_type,
+  GraphOp graph = rewriter.create<GraphOp>(root->getLoc(), funcType,
                                            /*arg_attrs=*/ArrayAttr{},
                                            /*res_attrs=*/ArrayAttr{});
   graph.setName(root->getName().getStringRef());
@@ -84,18 +84,18 @@ static LogicalResult outlineToGraph(TypedValue<TensorType> result,
   IRMapping mapping;
   for (size_t index = 0; index < arguments.size(); ++index) {
     Value arg = arguments[index];
-    auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
         arg.getLoc(), arg.getType(), graph.getArgument(index));
-    mapping.map(arg, cast_op.getResult(0));
+    mapping.map(arg, castOp.getResult(0));
   }
   ValueRange results;
   for (Operation* op : llvm::reverse(ops)) {
     results = rewriter.clone(*op, mapping)->getResults();
     mapping.map(op->getResults(), results);
   }
-  auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
-      result.getLoc(), func_type.getResults(), results);
-  rewriter.create<ReturnOp>(root->getLoc(), cast_op.getResults());
+  auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+      result.getLoc(), funcType.getResults(), results);
+  rewriter.create<ReturnOp>(root->getLoc(), castOp.getResults());
 
   // Replace root with cudnn.call op.
   rewriter.setInsertionPoint(root);
@@ -134,15 +134,15 @@ LogicalResult matchConv(stablehlo::ConvolutionOp op,
   if (op.getPrecisionConfig())
     return rewriter.notifyMatchFailure(op, "expected no precision config");
 
-  auto is_none_or_value = [](std::optional<DenseIntElementsAttr> attr,
-                             int64_t value) {
+  auto isNoneOrValue = [](std::optional<DenseIntElementsAttr> attr,
+                          int64_t value) {
     return !attr || llvm::all_of(attr->getValues<APInt>(), [&](APInt value) {
       return value.getSExtValue() == value;
     });
   };
-  if (!is_none_or_value(op.getLhsDilation(), 1))
+  if (!isNoneOrValue(op.getLhsDilation(), 1))
     return rewriter.notifyMatchFailure(op, "expected lhs_dilation to be 1");
-  if (!is_none_or_value(op.getRhsDilation(), 1))
+  if (!isNoneOrValue(op.getRhsDilation(), 1))
     return rewriter.notifyMatchFailure(op, "expected rhs_dilation to be 1");
   if (op.getWindowReversal() &&
       llvm::any_of(op.getWindowReversal()->getValues<bool>(),
@@ -189,10 +189,10 @@ static LogicalResult outlineConv(stablehlo::ConvolutionOp op,
 
 static Value castToCudnnTensor(TypedValue<TensorType> value,
                                PatternRewriter& rewriter) {
-  CudnnTensorType tensor_type = getCudnnTensorType(value.getType());
-  auto cast_op = rewriter.create<UnrealizedConversionCastOp>(
-      value.getLoc(), tensor_type, value);
-  return cast_op.getResult(0);
+  CudnnTensorType tensorType = getCudnnTensorType(value.getType());
+  auto castOp = rewriter.create<UnrealizedConversionCastOp>(value.getLoc(),
+                                                            tensorType, value);
+  return castOp.getResult(0);
 }
 
 // Converts a clamp 'op' into a cudnn.pointwise_relu.
@@ -200,13 +200,13 @@ static LogicalResult convertClamp(stablehlo::ClampOp op,
                                   PatternRewriter& rewriter) {
   if (!op->getParentOfType<GraphOp>())
     return rewriter.notifyMatchFailure(op, "expected child of graph");
-  auto min_or = matchRelu(op, rewriter);
-  if (failed(min_or)) return failure();
-  Type result_type = getCudnnTensorType(op.getType());
+  auto minOr = matchRelu(op, rewriter);
+  if (failed(minOr)) return failure();
+  Type resultType = getCudnnTensorType(op.getType());
   Value operand = castToCudnnTensor(op.getOperand(), rewriter);
-  Type element_type = op.getType().getElementType();
-  rewriter.replaceOpWithNewOp<ReluOp>(op, result_type, operand, element_type,
-                                      APFloat(min_or->convertToDouble()));
+  Type elementType = op.getType().getElementType();
+  rewriter.replaceOpWithNewOp<ReluOp>(op, resultType, operand, elementType,
+                                      APFloat(minOr->convertToDouble()));
   return success();
 }
 // Converts convolution 'op' into a cudnn.convolution.
@@ -215,31 +215,31 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
   if (!op->getParentOfType<GraphOp>())
     return rewriter.notifyMatchFailure(op, "expected child of graph");
   if (failed(matchConv(op, rewriter))) return failure();
-  Type result_type = getCudnnTensorType(op.getType());
+  Type resultType = getCudnnTensorType(op.getType());
   Value lhs = castToCudnnTensor(op.getLhs(), rewriter);
   Value rhs = castToCudnnTensor(op.getRhs(), rewriter);
 
   APFloat alpha(1.0f);
   APFloat beta(0.0f);
 
-  uint32_t spatial_dim_count =
+  uint32_t spatialDimCount =
       op.getDimensionNumbers().getInputSpatialDimensions().size();
-  auto get_attr_or = [&](std::optional<DenseIntElementsAttr> attr,
-                         int64_t value) {
-    if (!attr) return SmallVector<int64_t>(spatial_dim_count, value);
+  auto getAttrOr = [spatialDimCount](std::optional<DenseIntElementsAttr> attr,
+                                     int64_t value) {
+    if (!attr) return SmallVector<int64_t>(spatialDimCount, value);
     SmallVector<int64_t> values;
     llvm::transform(attr->getValues<APInt>(), std::back_inserter(values),
                     [](APInt stride) { return stride.getSExtValue(); });
     return values;
   };
-  SmallVector<int64_t> spatial_stride = get_attr_or(op.getWindowStrides(), 1);
-  SmallVector<int64_t> pre_padding = get_attr_or(op.getPadding(), 0);
-  SmallVector<int64_t> post_padding(spatial_dim_count, 0);
-  SmallVector<int64_t> dilation = get_attr_or(op.getRhsDilation(), 1);
+  SmallVector<int64_t> spatialStride = getAttrOr(op.getWindowStrides(), 1);
+  SmallVector<int64_t> prePadding = getAttrOr(op.getPadding(), 0);
+  SmallVector<int64_t> postPadding(spatialDimCount, 0);
+  SmallVector<int64_t> dilation = getAttrOr(op.getRhsDilation(), 1);
 
   rewriter.replaceOpWithNewOp<ConvolutionOp>(
-      op, result_type, lhs, rhs, alpha, beta, spatial_dim_count, spatial_stride,
-      pre_padding, post_padding, dilation);
+      op, resultType, lhs, rhs, alpha, beta, spatialDimCount, spatialStride,
+      prePadding, postPadding, dilation);
   return success();
 }
 

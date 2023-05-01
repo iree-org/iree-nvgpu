@@ -115,13 +115,13 @@ func::FuncOp CudnnAPI::getTensorCreateFunction(PatternRewriter &rewriter,
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args(/*dtype*/ 1 + rank, IntegerType::get(ctx, 64));
   SmallVector<Type> rets = {CudnnTensorType::get(ctx)};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
-  std::string function_name = llvm::formatv("cudnn.tensor.create.{0}d", rank);
-  if (layout) function_name += "." + stringifyLayout(*layout).lower();
+  std::string functionName = llvm::formatv("cudnn.tensor.create.{0}d", rank);
+  if (layout) functionName += "." + stringifyLayout(*layout).lower();
 
-  return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
-                 function_type);
+  return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
+                 functionType);
 }
 
 func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
@@ -134,10 +134,10 @@ func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
 
   SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*is_virtual=*/i32};
   SmallVector<Type> rets = {/*y=*/tensor};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
   return addDecl(rewriter, module, StringAttr::get(ctx, Twine("cudnn.") + op),
-                 function_type);
+                 functionType);
 }
 
 func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
@@ -151,10 +151,10 @@ func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
   SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*b=*/tensor,
                             /*alpha2=*/f32, /*is_virtual=*/i32};
   SmallVector<Type> rets = {/*y=*/tensor};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
   return addDecl(rewriter, module, StringAttr::get(ctx, Twine("cudnn.") + op),
-                 function_type);
+                 functionType);
 }
 
 func::FuncOp CudnnAPI::getBiasFunction(PatternRewriter &rewriter,
@@ -165,10 +165,10 @@ func::FuncOp CudnnAPI::getBiasFunction(PatternRewriter &rewriter,
 
   SmallVector<Type> args = {/*x=*/tensor, /*b=*/tensor, /*is_virtual=*/i32};
   SmallVector<Type> rets = {/*y=*/tensor};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
   return addDecl(rewriter, module, StringAttr::get(ctx, "cudnn.bias"),
-                 function_type);
+                 functionType);
 }
 
 func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
@@ -188,11 +188,11 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
   args.append(1, /*mode=*/i32);
 
   SmallVector<Type> rets = {/*y=*/tensor};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
-  auto function_name = llvm::formatv("cudnn.convolution.{0}d", spatial_dims);
-  return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
-                 function_type);
+  auto functionName = llvm::formatv("cudnn.convolution.{0}d", spatial_dims);
+  return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
+                 functionType);
 }
 
 func::FuncOp CudnnAPI::getHandleFunction(PatternRewriter &rewriter,
@@ -200,9 +200,9 @@ func::FuncOp CudnnAPI::getHandleFunction(PatternRewriter &rewriter,
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args = {IREE::HAL::DeviceType::get(ctx)};
   SmallVector<Type> rets = {HandleType::get(ctx)};
-  auto function_type = FunctionType::get(ctx, args, rets);
-  auto function_name = StringAttr::get(ctx, "cudnn.handle");
-  return addDecl(rewriter, module, function_name, function_type);
+  auto functionType = FunctionType::get(ctx, args, rets);
+  auto functionName = StringAttr::get(ctx, "cudnn.handle");
+  return addDecl(rewriter, module, functionName, functionType);
 }
 
 func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
@@ -210,9 +210,9 @@ func::FuncOp CudnnAPI::getOperationGraphCreateFunction(
   MLIRContext *ctx = module->getContext();
   SmallVector<Type> args = {HandleType::get(ctx), CudnnTensorType::get(ctx)};
   SmallVector<Type> rets = {cudnn::OperationGraphType::get(ctx)};
-  auto function_type = FunctionType::get(ctx, args, rets);
-  auto function_name = StringAttr::get(ctx, "cudnn.operation_graph.create");
-  return addDecl(rewriter, module, function_name, function_type);
+  auto functionType = FunctionType::get(ctx, args, rets);
+  auto functionName = StringAttr::get(ctx, "cudnn.operation_graph.create");
+  return addDecl(rewriter, module, functionName, functionType);
 }
 
 func::FuncOp CudnnAPI::getExecutableCreateFunction(PatternRewriter &rewriter,
@@ -233,11 +233,11 @@ func::FuncOp CudnnAPI::getExecuteFunction(PatternRewriter &rewriter,
   args.resize(args.size() + num_args, IREE::HAL::BufferViewType::get(ctx));
 
   SmallVector<Type> rets = {IREE::HAL::BufferViewType::get(ctx)};
-  auto function_type = FunctionType::get(ctx, args, rets);
+  auto functionType = FunctionType::get(ctx, args, rets);
 
-  auto function_name = llvm::formatv("cudnn.execute.{0}", num_args);
-  return addDecl(rewriter, module, StringAttr::get(ctx, function_name),
-                 function_type);
+  auto functionName = llvm::formatv("cudnn.execute.{0}", num_args);
+  return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
+                 functionType);
 }
 
 //===----------------------------------------------------------------------===//
@@ -664,14 +664,14 @@ struct ConvertCudnnConvolutionOp
 
     // Prepare arguments for convolution API call.
     SmallVector<Value> args(adaptor.getOperands());
-    auto push_back = [&](llvm::ArrayRef<int64_t> values) {
+    auto pushBack = [&](llvm::ArrayRef<int64_t> values) {
       for (int64_t value : values)
         args.push_back(b.create<arith::ConstantIntOp>(value, 64));
     };
-    push_back(op.getSpatialStride());
-    push_back(op.getPrePadding());
-    push_back(op.getPostPadding());
-    push_back(op.getDilation());
+    pushBack(op.getSpatialStride());
+    pushBack(op.getPrePadding());
+    pushBack(op.getPostPadding());
+    pushBack(op.getDilation());
     args.push_back(b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32));
     args.push_back(b.create<arith::ConstantIntOp>(mode, 32));
 

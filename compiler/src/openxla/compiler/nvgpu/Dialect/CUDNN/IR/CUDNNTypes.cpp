@@ -121,31 +121,31 @@ Type CudnnTensorType::parse(mlir::AsmParser &parser) {
   }
 
   // Parse optional tensor layout.
-  std::variant<std::monostate, Layout, AffineMap> tensor_layout;
+  std::variant<std::monostate, Layout, AffineMap> tensorLayout;
 
   if (succeeded(parser.parseOptionalComma())) {
     //  Try to parse affine map defining strides.
     AffineMapAttr strides;
     if (auto parsed = parser.parseOptionalAttribute(strides);
         parsed.has_value() && succeeded(*parsed)) {
-      tensor_layout = strides.getAffineMap();
+      tensorLayout = strides.getAffineMap();
     }
 
     // If affine map was not parsed, it means we must parse a layout.
     if (!strides) {
       auto parsed = FieldParser<Layout>::parse(parser);
       if (failed(parsed)) return Type();
-      tensor_layout = *parsed;
+      tensorLayout = *parsed;
     }
   }
 
   // Parse closing `>`.
   if (failed(parser.parseGreater())) return Type();
 
-  if (auto *layout = std::get_if<Layout>(&tensor_layout))
+  if (auto *layout = std::get_if<Layout>(&tensorLayout))
     return CudnnTensorType::get(shape, elementType, *layout);
 
-  if (auto *strides = std::get_if<AffineMap>(&tensor_layout))
+  if (auto *strides = std::get_if<AffineMap>(&tensorLayout))
     return CudnnTensorType::get(shape, elementType, *strides);
 
   return CudnnTensorType::get(shape, elementType);

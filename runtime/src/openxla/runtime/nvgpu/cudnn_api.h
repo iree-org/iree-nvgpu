@@ -13,6 +13,7 @@
 #include <cudnn_frontend.h>
 #include <iree/hal/buffer.h>
 #include <iree/hal/device.h>
+#include <iree/modules/hal/types.h>
 #include <iree/vm/ref_cc.h>
 
 #include <optional>

@@ -57,6 +57,7 @@ iree_cc_library(
     ::cudnn_stub
     cudnn_frontend
     iree::hal::drivers::cuda
+    iree::modules::hal
     iree::vm
   PUBLIC
 )

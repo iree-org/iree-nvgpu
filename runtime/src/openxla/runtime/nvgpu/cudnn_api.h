@@ -143,6 +143,7 @@ class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
   std::vector<CudnnTensor*> rets() const;
 
   iree::span<const int64_t> uids() const;
+  iree::span<const int64_t> alignments() const;
 
   cudnnHandle_t handle() const;
   iree_hal_device_t* device() const;
@@ -156,8 +157,9 @@ class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
   std::vector<iree::vm::ref<CudnnTensor>> args_;
   std::vector<iree::vm::ref<CudnnTensor>> rets_;
 
-  // Ids of tensors in `args_` and `rets_`.
+  // Ids and alignments of tensors in `args_` and `rets_`.
   std::vector<int64_t> uids_;
+  std::vector<int64_t> alignments_;
 };
 
 //===----------------------------------------------------------------------===//

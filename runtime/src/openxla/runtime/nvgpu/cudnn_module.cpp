@@ -13,6 +13,7 @@
 #include <iree/base/status_cc.h>
 #include <iree/hal/buffer.h>
 #include <iree/hal/drivers/cuda/dynamic_symbols.h>
+#include <iree/hal/drivers/cuda/status_util.h>
 #include <iree/vm/list.h>
 #include <iree/vm/ref_cc.h>
 #include <openxla/runtime/nvgpu/cudnn_api.h>
@@ -334,6 +335,12 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
       output_buffer.get(), output_shape.size(), output_shape.data(),
       IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
       host_allocator_, &output_view));
+
+  // TODO(ezhulenev): We have to use IREE semaphores to efficiently synchronize
+  // IREE compute stream with cuDNN stream. However today CUDA HAL does not give
+  // us access to efficient synchronization mechanisms, so we just sync here.
+  CUDA_RETURN_IF_ERROR(cuda_syms_, cuStreamSynchronize(NULL),
+                       "cuStreamSynchronize");
 
   return output_view;
 }

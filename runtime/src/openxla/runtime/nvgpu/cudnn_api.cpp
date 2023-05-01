@@ -120,10 +120,12 @@ CudnnOperationGraph::CudnnOperationGraph(openxla_cudnn_dynamic_symbols_t* syms,
   for (auto* arg : args) {
     args_.push_back(vm::retain_ref(arg));
     uids_.push_back(arg->tensor().getId());
+    alignments_.push_back(arg->tensor().getAlignment());
   }
   for (auto* ret : rets) {
     rets_.push_back(vm::retain_ref(ret));
     uids_.push_back(ret->tensor().getId());
+    alignments_.push_back(ret->tensor().getAlignment());
   }
 }
 
@@ -143,6 +145,10 @@ std::vector<CudnnTensor*> CudnnOperationGraph::rets() const {
 }
 
 iree::span<const int64_t> CudnnOperationGraph::uids() const { return uids_; }
+
+iree::span<const int64_t> CudnnOperationGraph::alignments() const {
+  return alignments_;
+}
 
 cudnnHandle_t CudnnOperationGraph::handle() const { return handle_->handle(); }
 
@@ -202,6 +208,19 @@ Status CudnnExecutable::Execute(span<iree_hal_buffer_t* const> buffers) {
 
   auto uids = graph_->uids();
   IREE_ASSERT_EQ(ptrs.size(), uids.size());
+
+  auto alignments = graph_->alignments();
+  IREE_ASSERT_EQ(alignments.size(), uids.size());
+
+  // Check that all device pointers are aligned as promised to cuDNN.
+  for (size_t i = 0; i < ptrs.size(); ++i) {
+    if (ptrs[i] % alignments[i] != 0)
+      return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                              "buffer argument #%ld (%p) is not aligned to %ld "
+                              "bytes required by cuDNN graph descriptor",
+                              i, reinterpret_cast<void*>(ptrs[i]),
+                              alignments[i]);
+  }
 
   // TODO(ezhulenev): Support plans with workspace.
   IREE_ASSERT_EQ(plans_[0].getWorkspaceSize(), 0);

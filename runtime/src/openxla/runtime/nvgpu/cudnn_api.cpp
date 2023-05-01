@@ -487,7 +487,7 @@ StatusOr<vm::ref<CudnnHandle>> CreateHandle(
   IREE_ASSERT_ARGUMENT(device);
   cudnnHandle_t handle = {0};
 
-  if (iree_hal_cuda_device_isa(device))
+  if (!iree_hal_cuda_device_isa(device))
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "HAL device must be a CUDA device to create cuDNN handle");

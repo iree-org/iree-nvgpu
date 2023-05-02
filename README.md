@@ -1,7 +1,7 @@
 # OpenXLA NVIDIA GPU Compiler and Runtime
 
 This project contains the compiler and runtime plugins enabling specialized
-targeting of the OpenXLA platform the NVIDIA GPUs. It builds on top of the
+targeting of the OpenXLA platform to NVIDIA GPUs. It builds on top of the
 core IREE toolkit.
 
 ## Development setup
@@ -21,3 +21,9 @@ cmake -GNinja -B build/ -S . \
 # Recommended:
 # -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 ```
+
+Note that you will need a check-out of the IREE codebase in `../iree` relative
+to the directory where the `openxla-nvgpu` compiler was checked out. Refer to
+the IREE [getting
+started](https://openxla.github.io/iree/building-from-source/getting-started/)
+guide for details of how to set this up.

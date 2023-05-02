@@ -7,19 +7,18 @@
 #ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
 #define OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
 
-#include <iree/hal/channel.h>
 #define NV_CUDNN_DISABLE_EXCEPTION
 
 #include <cudnn_frontend.h>
-#include <iree/hal/buffer.h>
-#include <iree/hal/device.h>
-#include <iree/modules/hal/types.h>
-#include <iree/vm/ref_cc.h>
 
 #include <optional>
 
 #include "iree/base/internal/span.h"
+#include "iree/hal/buffer_view.h"
+#include "iree/hal/device.h"
+#include "iree/hal/drivers/cuda/dynamic_symbols.h"
 #include "iree/vm/api.h"
+#include "iree/vm/ref_cc.h"
 #include "openxla/runtime/nvgpu/cudnn_headers.h"
 #include "openxla/runtime/nvgpu/dynamic_symbols.h"
 
@@ -143,6 +142,9 @@ class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
   std::vector<CudnnTensor*> args() const;
   std::vector<CudnnTensor*> rets() const;
 
+  CudnnTensor* arg(size_t index) const;
+  CudnnTensor* ret(size_t index) const;
+
   iree::span<const int64_t> uids() const;
   iree::span<const int64_t> alignments() const;
 
@@ -173,16 +175,20 @@ class CudnnOperationGraph : public iree::vm::RefObject<CudnnOperationGraph> {
 // at run time to find the best-performing config.
 class CudnnExecutable : public iree::vm::RefObject<CudnnExecutable> {
  public:
-  CudnnExecutable(openxla_cudnn_dynamic_symbols_t* syms,
+  CudnnExecutable(iree_hal_cuda_dynamic_symbols_t* cuda_syms,
+                  openxla_cudnn_dynamic_symbols_t* syms,
                   CudnnOperationGraph& graph,
                   iree::span<const cudnn_frontend::ExecutionPlan> plans);
   ~CudnnExecutable();
 
   const CudnnOperationGraph& graph() const;
 
-  // Executes operation graph with user provided buffers using one of the
-  // available execution plans.
-  iree::Status Execute(iree::span<iree_hal_buffer_t* const> buffers);
+  // Executes operation graph with user provided inputs using one of the
+  // available execution plans. Returns a view into allocated buffer for the
+  // graph execution result.
+  iree::StatusOr<iree::vm::ref<iree_hal_buffer_view_t>> Execute(
+      iree_allocator_t host_allocator,
+      iree::span<iree_hal_buffer_view_t* const> args);
 
   iree_hal_device_t* device() const;
   cudnnHandle_t handle() const;
@@ -191,6 +197,7 @@ class CudnnExecutable : public iree::vm::RefObject<CudnnExecutable> {
   // performing execution plan at run time.
 
  private:
+  iree_hal_cuda_dynamic_symbols_t* cuda_syms_;
   openxla_cudnn_dynamic_symbols_t* syms_;
   iree::vm::ref<CudnnOperationGraph> graph_;
   std::vector<cudnn_frontend::ExecutionPlan> plans_;
@@ -227,7 +234,10 @@ iree::StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
 // Creates a forward convolution operation.
 iree::StatusOr<iree::vm::ref<CudnnTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    CudnnTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
+    CudnnTensor& filter, iree::span<const int64_t> stride,
+    iree::span<const int64_t> pre_padding,
+    iree::span<const int64_t> post_padding, iree::span<const int64_t> dilation,
+    int64_t uid, int64_t alignment, bool is_virtual,
     cudnnConvolutionMode_t mode);
 
 // Creates an operation graph computing tensor results.
@@ -241,6 +251,7 @@ iree::StatusOr<iree::vm::ref<CudnnOperationGraph>> CreateOperationGraph(
 
 // Creates an executable from the operation graph.
 iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
+    iree_hal_cuda_dynamic_symbols_t* cuda_syms,
     openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph);
 
 //===----------------------------------------------------------------------===//

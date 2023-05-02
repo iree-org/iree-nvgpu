@@ -92,11 +92,10 @@ class CudnnModuleState {
       std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs);
 
   // Creates a pointwise relu operation and returns result tensor.
-  StatusOr<vm::ref<CudnnTensor>> PointwiseRelu(const vm::ref<CudnnTensor> input,
-                                               float lower_clip,
-                                               float upper_clip, int64_t uid,
-                                               int64_t alignment,
-                                               int32_t is_virtual);
+  StatusOr<vm::ref<CudnnTensor>> Relu(const vm::ref<CudnnTensor> input,
+                                      float lower_clip, float upper_clip,
+                                      int64_t uid, int64_t alignment,
+                                      int32_t is_virtual);
 
   // Creates a pointwise unary operation and returns a result tensor.
   template <cudnnPointwiseMode_t mode>
@@ -187,11 +186,11 @@ Status CudnnModuleState::PrintGraphDebug(
   return OkStatus();
 }
 
-StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseRelu(
+StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
     int64_t uid, int64_t alignment, int32_t is_virtual) {
-  return CreatePointwiseRelu(syms_, *input, lower_clip, upper_clip, uid,
-                             alignment, is_virtual);
+  return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
+                    is_virtual);
 }
 
 template <cudnnPointwiseMode_t mode>
@@ -302,7 +301,7 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
 
     // cuDNN operations
     MakeNativeFunction("bias", &State::Bias),
-    MakeNativeFunction("pointwise_relu", &State::PointwiseRelu),
+    MakeNativeFunction("relu", &State::Relu),
     MakeNativeFunction("convolution.2d", &State::Convolution<2>),
 
     // Debugging operations

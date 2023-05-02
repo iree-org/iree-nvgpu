@@ -1,4 +1,6 @@
-// RUN: iree-opt --iree-plugin=openxla_nvgpu %s | iree-opt --iree-plugin=openxla_nvgpu | FileCheck %s
+// RUN: iree-opt --iree-plugin=openxla_nvgpu %s | \
+// RUN: iree-opt --iree-plugin=openxla_nvgpu | \
+// RUN: FileCheck %s
 
 #map = affine_map<(d0, d1, d2) -> (d0, d2, d1)>
 
@@ -17,7 +19,7 @@ func.func @nhwc(%arg0: !cudnn.tensor<?x?x?x?xf32, NHWC>) {
   return
 }
 
-// CHECK: @nhwc(%arg0: !cudnn.tensor<?x?x?x?xf32, NCHW>)
+// CHECK: @nchw(%arg0: !cudnn.tensor<?x?x?x?xf32, NCHW>)
 func.func @nchw(%arg0: !cudnn.tensor<?x?x?x?xf32, NCHW>) {
   return
 }

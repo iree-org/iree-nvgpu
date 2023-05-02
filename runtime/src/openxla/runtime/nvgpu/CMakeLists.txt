@@ -59,7 +59,6 @@ iree_cc_library(
     iree::hal::drivers::cuda
     iree::modules::hal
     iree::vm
-    iree::modules::hal
   PUBLIC
 )
 

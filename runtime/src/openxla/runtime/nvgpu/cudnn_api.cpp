@@ -6,20 +6,23 @@
 
 #include "openxla/runtime/nvgpu/cudnn_api.h"
 
-#include <iree/base/assert.h>
-#include <iree/base/internal/span.h>
-#include <iree/base/status.h>
-#include <iree/base/status_cc.h>
-#include <iree/hal/buffer.h>
-#include <iree/hal/drivers/cuda/cuda_buffer.h>
-#include <iree/vm/ref_cc.h>
-#include <openxla/runtime/nvgpu/status_util.h>
-
+#include <algorithm>
 #include <iostream>
+#include <iterator>
 #include <type_traits>
 #include <unordered_set>
 
+#include "iree/base/assert.h"
+#include "iree/base/internal/span.h"
+#include "iree/base/status.h"
+#include "iree/base/status_cc.h"
+#include "iree/hal/buffer.h"
+#include "iree/hal/buffer_view.h"
+#include "iree/hal/drivers/cuda/cuda_buffer.h"
 #include "iree/hal/drivers/cuda/cuda_device.h"
+#include "iree/hal/drivers/cuda/status_util.h"
+#include "iree/modules/hal/types.h"
+#include "iree/vm/ref_cc.h"
 #include "openxla/runtime/nvgpu/cudnn_stub.h"
 #include "openxla/runtime/nvgpu/status_util.h"
 
@@ -144,6 +147,14 @@ std::vector<CudnnTensor*> CudnnOperationGraph::rets() const {
   return AsPtrs(rets_);
 }
 
+CudnnTensor* CudnnOperationGraph::arg(size_t index) const {
+  return args_[index].get();
+}
+
+CudnnTensor* CudnnOperationGraph::ret(size_t index) const {
+  return rets_[index].get();
+}
+
 iree::span<const int64_t> CudnnOperationGraph::uids() const { return uids_; }
 
 iree::span<const int64_t> CudnnOperationGraph::alignments() const {
@@ -160,10 +171,20 @@ iree_hal_device_t* CudnnOperationGraph::device() const {
 // CudnnExecutable
 //===----------------------------------------------------------------------===//
 
+// Memory alignment for transient workspace buffers required by cuDNN plans. We
+// alignt to 128 bytes, to allow memory coalescing when reading/writing from/to
+// workspace buffer.
+//
+// TODO(ezhulenev): We should benchmark that memory alignment brings any
+// measurable improvements to any benchmarks, and maybe make it smaller.
+static constexpr size_t kWorkspaceBufferAlignment = 128;
+
 CudnnExecutable::CudnnExecutable(
+    iree_hal_cuda_dynamic_symbols_t* cuda_syms,
     openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph,
     span<const cudnn_frontend::ExecutionPlan> plans)
-    : syms_(syms),
+    : cuda_syms_(cuda_syms),
+      syms_(syms),
       graph_(vm::retain_ref(&graph)),
       plans_(plans.begin(), plans.end()) {}
 
@@ -178,33 +199,135 @@ cudnnHandle_t CudnnExecutable::handle() const { return graph_->handle(); }
 
 iree_hal_device_t* CudnnExecutable::device() const { return graph_->device(); }
 
-// Converts IREE HAL buffers to CUDA device pointers.
-static std::vector<CUdeviceptr> GetDevicePointers(
-    span<iree_hal_buffer_t* const> buffers) {
-  std::vector<CUdeviceptr> ptrs(buffers.size());
-  for (size_t i = 0; i < buffers.size(); ++i) {
-    iree_hal_buffer_t* allocated = iree_hal_buffer_allocated_buffer(buffers[i]);
-    IREE_ASSERT_EQ(iree_hal_cuda_buffer_type(allocated),
-                   IREE_HAL_CUDA_BUFFER_TYPE_DEVICE);
+static CUdeviceptr GetDevicePointer(const iree_hal_buffer_t* buffer) {
+  iree_hal_buffer_t* allocated = iree_hal_buffer_allocated_buffer(buffer);
+  IREE_ASSERT_EQ(iree_hal_cuda_buffer_type(allocated),
+                 IREE_HAL_CUDA_BUFFER_TYPE_DEVICE);
+  return iree_hal_cuda_buffer_device_pointer(allocated) +
+         iree_hal_buffer_byte_offset(buffer);
+}
 
-    ptrs[i] = iree_hal_cuda_buffer_device_pointer(allocated) +
-              iree_hal_buffer_byte_offset(buffers[i]);
-  }
+static std::vector<CUdeviceptr> GetDevicePointers(
+    span<iree_hal_buffer_view_t* const> args,
+    span<iree_hal_buffer_view_t* const> rets) {
+  std::vector<CUdeviceptr> ptrs;
+  ptrs.reserve(args.size() + rets.size());
+
+  auto ptr = [](const iree_hal_buffer_view_t* view) {
+    return GetDevicePointer(iree_hal_buffer_view_buffer(view));
+  };
+
+  std::transform(args.begin(), args.end(), std::back_inserter(ptrs), ptr);
+  std::transform(rets.begin(), rets.end(), std::back_inserter(ptrs), ptr);
   return ptrs;
 }
 
-Status CudnnExecutable::Execute(span<iree_hal_buffer_t* const> buffers) {
+// Converts a result tensor shape + strides into a row-major shape that can be
+// used to construct a buffer view, because once we return tensor to the caller
+// they become a row major buffers.
+static std::vector<iree_host_size_t> GetResultShape(
+    const cudnn_frontend::Tensor& result) {
+  const int64_t* dim = result.getDim();
+  const int64_t* stride = result.getStride();
+
+  std::vector<int64_t> indices(result.getDimCount());
+  std::iota(indices.begin(), indices.end(), 0);
+  std::sort(indices.begin(), indices.end(),
+            [&](int64_t a, int64_t b) { return stride[a] > stride[b]; });
+
+  std::vector<iree_host_size_t> dims(result.getDimCount());
+  for (size_t i = 0; i < indices.size(); ++i) dims[i] = dim[indices[i]];
+
+  return dims;
+}
+
+StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
+    iree_allocator_t host_allocator, span<iree_hal_buffer_view_t* const> args) {
   ScopedCudnnStubs stubs(syms_);
 
-  // Check that we have a buffer for every argument and result tensor.
-  if (buffers.size() != (graph_->args().size() + graph_->rets().size())) {
+  // Check that we have a buffer for every argument.
+  if (args.size() != graph().args().size()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "number of buffer arguments doesn't match the "
-                            "number of graph arguments and results");
+                            "number of buffer arguments %ld doesn't match the "
+                            "number of cuDNN graph arguments %ld",
+                            args.size(), graph().args().size());
   }
 
-  auto ptrs = GetDevicePointers(buffers);
+  // Currently we only support cuDNN graphs with a single result.
+  if (graph().rets().size() != 1) {
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "unsupported number of cuDNN graph results %ld, "
+                            "expected a cuDNN graph with single result",
+                            graph().rets().size());
+  }
+
+  const cudnn_frontend::Tensor& result = graph().ret(0)->tensor();
+  const cudnn_frontend::ExecutionPlan& plan = plans_[0];
+
+  iree_hal_device_t* device = graph().device();
+
+  // TODO(ezhulenev): We should not be always allocating host visible memory,
+  // for the most use cases device only memory should be more efficient. Revisit
+  // memory allocation once we have a new CUDA HAL implementation.
+  iree_hal_buffer_params_t result_buffer_params = {
+      /*.usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT | IREE_HAL_BUFFER_USAGE_MAPPING,
+      /*.access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+      /*.type=*/IREE_HAL_MEMORY_TYPE_OPTIMAL_FOR_DEVICE |
+          IREE_HAL_MEMORY_TYPE_HOST_VISIBLE,
+      /*.queue_affinity=*/IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*.min_alignment=*/static_cast<iree_host_size_t>(result.getAlignment()),
+  };
+
+  // It is always safe to allocate workspace buffer as device local.
+  iree_hal_buffer_params_t workspace_buffer_params = {
+      /*.usage=*/IREE_HAL_BUFFER_USAGE_DISPATCH_STORAGE,
+      /*.access=*/IREE_HAL_MEMORY_ACCESS_ALL,
+      /*.type=*/IREE_HAL_MEMORY_TYPE_DEVICE_LOCAL,
+      /*.queue_affinity=*/IREE_HAL_QUEUE_AFFINITY_ANY,
+      /*.min_alignment=*/kWorkspaceBufferAlignment,
+  };
+
+  // TODO(ezhulenev): We should be using semaphores to enforce ordering of
+  // cuDNN kernel launches and result allocation. We skip it today, because
+  // we know that we use cudaMallocManaged and a NULL CUDA stream.
+
+  // TODO(ezhulenev): Add support for all cuDNN data types.
+  IREE_ASSERT_EQ(result.getDataType(), CUDNN_DATA_FLOAT);
+  int64_t output_byte_length = result.getPackedElementCount() * sizeof(float);
+
+  vm::ref<iree_hal_buffer_t> result_buffer;
+  IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
+      device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
+      iree_hal_semaphore_list_empty(), IREE_HAL_ALLOCATOR_POOL_DEFAULT,
+      result_buffer_params, output_byte_length, &result_buffer));
+
+  vm::ref<iree_hal_buffer_t> workspace_buffer;
+  if (plan.getWorkspaceSize() > 0) {
+    IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
+        device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
+        iree_hal_semaphore_list_empty(), IREE_HAL_ALLOCATOR_POOL_DEFAULT,
+        workspace_buffer_params, output_byte_length, &workspace_buffer));
+  }
+
+  // Wrap the result buffer into a buffer view that provides the metadata for
+  // runtime verification.
+  vm::ref<iree_hal_buffer_view_t> result_view;
+  std::vector<iree_host_size_t> result_shape = GetResultShape(result);
+  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_create(
+      result_buffer.get(), result_shape.size(), result_shape.data(),
+      IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
+      host_allocator, &result_view));
+
+  // Prepare data for executing cuDNN graphs.
+  auto ptrs = GetDevicePointers(args, {result_view.get()});
   static_assert(sizeof(CUdeviceptr) == sizeof(void*));
+
+  // Maybe pass a workspace pointer to the cuDNN backend execute.
+  void* workspace = nullptr;
+  if (workspace_buffer) {
+    CUdeviceptr ptr = GetDevicePointer(workspace_buffer.get());
+    workspace = reinterpret_cast<void*>(ptr);
+  }
 
   auto uids = graph_->uids();
   IREE_ASSERT_EQ(ptrs.size(), uids.size());
@@ -222,10 +345,6 @@ Status CudnnExecutable::Execute(span<iree_hal_buffer_t* const> buffers) {
                               alignments[i]);
   }
 
-  // TODO(ezhulenev): Support plans with workspace.
-  IREE_ASSERT_EQ(plans_[0].getWorkspaceSize(), 0);
-  void* workspace = nullptr;
-
   // Pack pointers to device buffers with unique tensor ids.
   cudnn_frontend::VariantPack pack =
       cudnn_frontend::VariantPackBuilder()
@@ -240,7 +359,13 @@ Status CudnnExecutable::Execute(span<iree_hal_buffer_t* const> buffers) {
                                             pack.get_raw_desc()),
                         "cudnnBackendExecute()");
 
-  return iree_ok_status();
+  // TODO(ezhulenev): We have to use IREE semaphores to efficiently synchronize
+  // IREE compute stream with cuDNN stream. However today CUDA HAL does not give
+  // us access to efficient synchronization mechanisms, so we just sync here.
+  CUDA_RETURN_IF_ERROR(cuda_syms_, cuStreamSynchronize(NULL),
+                       "cuStreamSynchronize");
+
+  return result_view;
 }
 
 //===----------------------------------------------------------------------===//
@@ -402,22 +527,26 @@ static int64_t GetFwdConvDilatedFilterDim(int64_t filter_dim,
   return ((filter_dim - 1) * dilation) + 1;
 }
 
-static int64_t GetFwdConvPaddedImageDim(int64_t tensor_dim, int64_t padding) {
-  return tensor_dim + (2 * padding);
+static int64_t GetFwdConvPaddedImageDim(int64_t tensor_dim, int64_t pre_padding,
+                                        int64_t post_padding) {
+  return pre_padding + tensor_dim + post_padding;
 }
 
-static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t padding,
-                                   int64_t filter_dim, int64_t stride,
-                                   int64_t dilation) {
-  int64_t padded = GetFwdConvPaddedImageDim(tensor_dim, padding);
+static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t pre_padding,
+                                   int64_t post_padding, int64_t filter_dim,
+                                   int64_t stride, int64_t dilation) {
+  int64_t padded =
+      GetFwdConvPaddedImageDim(tensor_dim, pre_padding, post_padding);
   int64_t dilated = GetFwdConvDilatedFilterDim(filter_dim, dilation);
   return ((padded - dilated) / stride) + 1;
 }
 
 StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
     openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    CudnnTensor& filter, int64_t uid, int64_t alignment, bool is_virtual,
-    cudnnConvolutionMode_t mode) {
+    CudnnTensor& filter, span<const int64_t> stride,
+    span<const int64_t> pre_padding, span<const int64_t> post_padding,
+    span<const int64_t> dilation, int64_t uid, int64_t alignment,
+    bool is_virtual, cudnnConvolutionMode_t mode) {
   ScopedCudnnStubs stubs(syms);
 
   span<const int64_t> input_dims(input->getDim(), input->getDimCount());
@@ -437,17 +566,12 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
         "convolution input and filter must have the same rank");
   }
 
-  // TODO(ezhulenev): Add support for padded, dilated and strided convolutions.
-  std::array<int64_t, kSpatialDims> paddings = {0, 0};
-  std::array<int64_t, kSpatialDims> strides = {1, 1};
-  std::array<int64_t, kSpatialDims> dilations = {1, 1};
-
   // Compute convolution output dimensions.
   std::vector<int64_t> output_dims = {input_dims[0], input_dims[1]};  // [N, C]
   for (int d = 0; d < kSpatialDims; ++d) {
-    output_dims.push_back(GetFwdConvOutputDim(input_dims[d + 2], paddings[d],
-                                              filter_dims[d + 2], strides[d],
-                                              dilations[d]));
+    output_dims.push_back(
+        GetFwdConvOutputDim(input_dims[d + 2], pre_padding[d], post_padding[d],
+                            filter_dims[d + 2], stride[d], dilation[d]));
   }
 
   // Compute strides for output tensor based on input format.
@@ -473,10 +597,10 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
           .setComputeType(CUDNN_DATA_FLOAT)
           .setMathMode(mode)
           .setSpatialDimCount(kSpatialDims)
-          .setSpatialStride(kSpatialDims, strides.data())
-          .setPrePadding(kSpatialDims, paddings.data())
-          .setPostPadding(kSpatialDims, paddings.data())
-          .setDilation(kSpatialDims, dilations.data())
+          .setSpatialStride(kSpatialDims, stride.data())
+          .setPrePadding(kSpatialDims, pre_padding.data())
+          .setPostPadding(kSpatialDims, post_padding.data())
+          .setDilation(kSpatialDims, dilation.data())
           .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, convolution.get_status()));
 
@@ -597,6 +721,7 @@ StatusOr<vm::ref<CudnnOperationGraph>> CreateOperationGraph(
 static bool AcceptAllGraphs(cudnnBackendDescriptor_t) { return false; }
 
 iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
+    iree_hal_cuda_dynamic_symbols_t* cuda_syms,
     openxla_cudnn_dynamic_symbols_t* syms, CudnnOperationGraph& graph) {
   ScopedCudnnStubs stubs(syms);
 
@@ -644,7 +769,8 @@ iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
         "didn't find any engine config supporting cuDNN operation graph");
   }
 
-  return vm::ref<CudnnExecutable>(new CudnnExecutable(syms, graph, plans));
+  return vm::ref<CudnnExecutable>(
+      new CudnnExecutable(cuda_syms, syms, graph, plans));
 }
 
 //===----------------------------------------------------------------------===//

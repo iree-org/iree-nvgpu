@@ -6,26 +6,17 @@
 
 #include "openxla/runtime/nvgpu/cudnn_module.h"
 
-#include <iree/base/assert.h>
-#include <iree/base/config.h>
-#include <iree/base/internal/dynamic_library.h>
-#include <iree/base/status.h>
-#include <iree/base/status_cc.h>
-#include <iree/hal/buffer.h>
-#include <iree/hal/drivers/cuda/dynamic_symbols.h>
-#include <iree/hal/drivers/cuda/status_util.h>
-#include <iree/vm/list.h>
-#include <iree/vm/ref_cc.h>
-#include <openxla/runtime/nvgpu/cudnn_api.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 
+#include "iree/hal/drivers/cuda/dynamic_symbols.h"
 #include "iree/modules/hal/types.h"
 #include "iree/vm/dynamic/api.h"
 #include "iree/vm/native_module_cc.h"
+#include "iree/vm/ref_cc.h"
+#include "openxla/runtime/nvgpu/cudnn_api.h"
 #include "openxla/runtime/nvgpu/dynamic_symbols.h"
 #include "openxla/runtime/nvgpu/status_util.h"
 
@@ -56,24 +47,6 @@ struct NHWC {
     return ToArr<4>(GetChannelsLastStrides(dims));
   }
 };
-
-// Converts cuDNN tensor shape + strides into a row-major shape that can be
-// used to construct HAL buffer views.
-static std::vector<iree_host_size_t> GetRowMajorShape(
-    const cudnn_frontend::Tensor& tensor) {
-  const int64_t* dim = tensor.getDim();
-  const int64_t* stride = tensor.getStride();
-
-  std::vector<int64_t> indices(tensor.getDimCount());
-  std::iota(indices.begin(), indices.end(), 0);
-  std::sort(indices.begin(), indices.end(),
-            [&](int64_t a, int64_t b) { return stride[a] > stride[b]; });
-
-  std::vector<iree_host_size_t> dims(tensor.getDimCount());
-  for (size_t i = 0; i < indices.size(); ++i) dims[i] = dim[indices[i]];
-
-  return dims;
-}
 
 //===----------------------------------------------------------------------===//
 // Cudnn module state encapsulates all the state required for running cuDNN
@@ -253,8 +226,8 @@ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Convolution(
     int32_t mode) {
   IREE_ASSIGN_OR_RETURN(cudnnConvolutionMode_t conv_mode,
                         ToCudnnConvolutionMode(mode));
-  return CreateConvolution(syms_, *x, *w, uid_++, kAlignment, is_virtual,
-                           conv_mode);
+  return CreateConvolution(syms_, *x, *w, stride, pre_padding, post_padding,
+                           dilation, uid_++, kAlignment, is_virtual, conv_mode);
 }
 
 StatusOr<vm::ref<CudnnHandle>> CudnnModuleState::Handle(
@@ -269,80 +242,20 @@ StatusOr<vm::ref<CudnnOperationGraph>> CudnnModuleState::OperationGraphCreate(
 
 StatusOr<vm::ref<CudnnExecutable>> CudnnModuleState::Executable(
     const vm::ref<CudnnOperationGraph> graph) {
-  return CreateExecutable(syms_, *graph);
+  return CreateExecutable(cuda_syms_, syms_, *graph);
 }
 
 template <size_t n>
 StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
     const vm::ref<CudnnExecutable> executable,
     std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs) {
-  // Arguments and results defined by the operation graph.
-  std::vector<CudnnTensor*> args = executable->graph().args();
-  std::vector<CudnnTensor*> rets = executable->graph().rets();
-  IREE_ASSERT_EQ(rets.size(), 1);
+  std::array<iree_hal_buffer_view_t*, n> args;
+  for (size_t i = 0; i < n; ++i) args[i] = inputs[i].get();
 
-  // Tensors required for running single convolution operation.
-  const cudnn_frontend::Tensor& output = rets[0]->tensor();
+  IREE_ASSIGN_OR_RETURN(vm::ref<iree_hal_buffer_view_t> result,
+                        executable->Execute(host_allocator_, args));
 
-  iree_hal_device_t* device = executable->device();
-
-  // Allocate buffer for tensor output.
-  iree_hal_buffer_params_t output_buffer_params = {
-      /*.usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT | IREE_HAL_BUFFER_USAGE_MAPPING,
-      /*.access=*/IREE_HAL_MEMORY_ACCESS_ALL,
-      /*.type=*/IREE_HAL_MEMORY_TYPE_OPTIMAL_FOR_DEVICE |
-          IREE_HAL_MEMORY_TYPE_HOST_VISIBLE,
-      /*.queue_affinity=*/IREE_HAL_QUEUE_AFFINITY_ANY,
-      /*.min_alignment=*/static_cast<iree_host_size_t>(output.getAlignment()),
-  };
-
-  vm::ref<iree_hal_semaphore_t> semaphore;
-  IREE_RETURN_IF_ERROR(iree_hal_semaphore_create(device, 0, &semaphore));
-  vm::ref<iree_hal_fence_t> alloca_fence;
-  IREE_RETURN_IF_ERROR(iree_hal_fence_create_at(
-      semaphore.get(), 1, host_allocator_, &alloca_fence));
-
-  // TODO(ezhulenev): Add support for all cuDNN data types.
-  IREE_ASSERT_EQ(output.getDataType(), CUDNN_DATA_FLOAT);
-  int64_t output_byte_length = output.getPackedElementCount() * sizeof(float);
-
-  vm::ref<iree_hal_buffer_t> output_buffer;
-  IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
-      device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
-      iree_hal_fence_semaphore_list(alloca_fence.get()),
-      IREE_HAL_ALLOCATOR_POOL_DEFAULT, output_buffer_params, output_byte_length,
-      &output_buffer));
-
-  // Wait for the alloca fence before executing cuDNN graph.
-  IREE_RETURN_IF_ERROR(
-      iree_hal_fence_wait(alloca_fence.get(), iree_infinite_timeout()));
-
-  // Get underlying buffers from buffer view inputs.
-  std::vector<iree_hal_buffer_t*> buffers(inputs.size() + 1);
-  for (unsigned i = 0; i < inputs.size(); ++i) {
-    buffers[i] = iree_hal_buffer_view_buffer(inputs[i].get());
-  }
-  buffers.back() = output_buffer.get();
-
-  // TODO(ezhulenev): Allocate workspace required for running executable.
-  IREE_RETURN_IF_ERROR(executable->Execute(buffers));
-
-  // Wrap the buffer in a buffer view that provides the metadata for
-  // runtime verification.
-  vm::ref<iree_hal_buffer_view_t> output_view;
-  std::vector<iree_host_size_t> output_shape = GetRowMajorShape(output);
-  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_create(
-      output_buffer.get(), output_shape.size(), output_shape.data(),
-      IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
-      host_allocator_, &output_view));
-
-  // TODO(ezhulenev): We have to use IREE semaphores to efficiently synchronize
-  // IREE compute stream with cuDNN stream. However today CUDA HAL does not give
-  // us access to efficient synchronization mechanisms, so we just sync here.
-  CUDA_RETURN_IF_ERROR(cuda_syms_, cuStreamSynchronize(NULL),
-                       "cuStreamSynchronize");
-
-  return output_view;
+  return result;
 }
 
 //===----------------------------------------------------------------------===//

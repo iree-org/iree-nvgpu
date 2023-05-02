@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <numeric>
 
+#include "iree/compiler/Dialect/HAL/IR/HALDialect.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"

@@ -15,6 +15,7 @@ def ConvertHLOToCUDNN : Pass<"openxla-nvgpu-convert-hlo-to-cudnn", "mlir::Module
     ::openxla::compiler::nvgpu::cudnn::createConvertHLOToCUDNNPass()
   }];
   let dependentDialects = [
+    "mlir::iree_compiler::IREE::HAL::HALDialect",
     "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
   ];
 }

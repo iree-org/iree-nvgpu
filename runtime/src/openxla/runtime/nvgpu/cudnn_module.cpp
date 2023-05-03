@@ -372,9 +372,17 @@ static iree_status_t RegisterType(iree_vm_instance_t* instance,
                                         out_registration);
 }
 
-iree_status_t CreateCudnnModule(iree_vm_instance_t* instance,
-                                iree_allocator_t host_allocator,
-                                iree_vm_module_t** out_module) {
+}  // namespace openxla::runtime::nvgpu
+
+//===----------------------------------------------------------------------===//
+// Static IREE VM module registration
+//===----------------------------------------------------------------------===//
+
+using namespace openxla::runtime::nvgpu;
+
+extern "C" iree_status_t openxla_nvgpu_cudnn_module_create(
+    iree_vm_instance_t* instance, iree_allocator_t host_allocator,
+    iree_vm_module_t** out_module) {
   IREE_ASSERT_ARGUMENT(out_module);
 
   auto module = std::make_unique<CudnnModule>(instance, host_allocator);
@@ -383,7 +391,8 @@ iree_status_t CreateCudnnModule(iree_vm_instance_t* instance,
   return iree_ok_status();
 }
 
-iree_status_t RegisterCudnnTypes(iree_vm_instance_t* instance) {
+extern "C" iree_status_t openxla_nvgpu_cudnn_module_register_types(
+    iree_vm_instance_t* instance) {
   IREE_RETURN_IF_ERROR(RegisterType<CudnnTensor>(instance, "cudnn.tensor",
                                                  &cudnn_tensor_registration));
   IREE_RETURN_IF_ERROR(RegisterType<CudnnHandle>(instance, "cudnn.handle",
@@ -395,13 +404,9 @@ iree_status_t RegisterCudnnTypes(iree_vm_instance_t* instance) {
   return iree_ok_status();
 }
 
-}  // namespace openxla::runtime::nvgpu
-
 //===----------------------------------------------------------------------===//
 // Dynamic IREE VM module registration
 //===----------------------------------------------------------------------===//
-
-using namespace openxla::runtime::nvgpu;
 
 extern "C" IREE_VM_DYNAMIC_MODULE_EXPORT iree_status_t
 openxla_create_cudnn_module(iree_vm_dynamic_module_version_t max_version,
@@ -431,6 +436,7 @@ openxla_create_cudnn_module(iree_vm_dynamic_module_version_t max_version,
   // dynamically loaded and can't automatically access the hosting process
   // variables.
   IREE_RETURN_IF_ERROR(iree_hal_module_resolve_all_types(instance));
-  IREE_RETURN_IF_ERROR(RegisterCudnnTypes(instance));
-  return CreateCudnnModule(instance, host_allocator, out_module);
+  IREE_RETURN_IF_ERROR(openxla_nvgpu_cudnn_module_register_types(instance));
+  return openxla_nvgpu_cudnn_module_create(instance, host_allocator,
+                                           out_module);
 }

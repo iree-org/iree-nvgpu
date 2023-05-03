@@ -84,8 +84,10 @@ static SmallVector<int64_t> getTensorArgDims(CudnnTensorType tensor) {
   // Handle one of the pre-defined cuDNN tensor layout.
   if (layout) {
     switch (*layout) {
+      case Layout::KCHW:
       case Layout::NCHW:
         return {dims[0], dims[1], dims[2], dims[3]};
+      case Layout::KHWC:
       case Layout::NHWC:
         return {dims[0], dims[2], dims[3], dims[1]};
     }

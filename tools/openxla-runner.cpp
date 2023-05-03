@@ -11,8 +11,6 @@
 #include "iree/tooling/vm_util.h"
 #include "openxla/runtime/nvgpu/cudnn_module.h"
 
-using namespace openxla::runtime::nvgpu;
-
 // TODO: This is a temporary work around missing custom modules integration into
 // IREE tools (iree-run-module). We already have flags to enable plugins in
 // compiler tools (`iree-compiler` and `iree-opt`), but not yet in "runtime"
@@ -42,8 +40,8 @@ int main(int argc, char** argv) {
                                              &instance));
 
   // Register custom types define by cuDNN module.
-  IREE_CHECK_OK(
-      RegisterCudnnTypes(iree_runtime_instance_vm_instance(instance)));
+  IREE_CHECK_OK(openxla_nvgpu_cudnn_module_register_types(
+      iree_runtime_instance_vm_instance(instance)));
 
   // Try to create the CUDA device.
   iree_hal_device_t* device = NULL;
@@ -60,8 +58,9 @@ int main(int argc, char** argv) {
 
   // Create the custom module that can be reused across contexts.
   iree_vm_module_t* custom_module = NULL;
-  IREE_CHECK_OK(CreateCudnnModule(iree_runtime_instance_vm_instance(instance),
-                                  host_allocator, &custom_module));
+  IREE_CHECK_OK(openxla_nvgpu_cudnn_module_create(
+      iree_runtime_instance_vm_instance(instance), host_allocator,
+      &custom_module));
   IREE_CHECK_OK(iree_runtime_session_append_module(session, custom_module));
   iree_vm_module_release(custom_module);
 

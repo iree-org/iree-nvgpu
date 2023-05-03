@@ -213,12 +213,6 @@ iree::StatusOr<iree::vm::ref<CudnnTensor>> CreateTensor(
     iree::span<const int64_t> strides, int64_t uid, cudnnDataType_t dtype,
     int64_t alignment);
 
-// Creates a pointwise relu operation.
-iree::StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseRelu(
-    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
-    bool is_virtual);
-
 // Creates a pointwise unary operation.
 iree::StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
@@ -231,11 +225,15 @@ iree::StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
     CudnnTensor& x, float alpha, CudnnTensor& b, float alpha2, int64_t uid,
     int64_t alignment, bool is_virtual);
 
+// Creates a relu operation.
+iree::StatusOr<iree::vm::ref<CudnnTensor>> CreateRelu(
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& x, double lower_clip,
+    double upper_clip, int64_t uid, int64_t alignment, bool is_virtual);
+
 // Creates a forward convolution operation.
 iree::StatusOr<iree::vm::ref<CudnnTensor>> CreateConvolution(
-    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    CudnnTensor& filter, iree::span<const int64_t> stride,
-    iree::span<const int64_t> pre_padding,
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& x, CudnnTensor& w,
+    iree::span<const int64_t> stride, iree::span<const int64_t> pre_padding,
     iree::span<const int64_t> post_padding, iree::span<const int64_t> dilation,
     int64_t uid, int64_t alignment, bool is_virtual,
     cudnnConvolutionMode_t mode);

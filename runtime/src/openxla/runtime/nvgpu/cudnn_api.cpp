@@ -241,6 +241,38 @@ static std::vector<iree_host_size_t> GetResultShape(
   return dims;
 }
 
+static size_t GetHostSize(cudnnDataType_t dtype) {
+  switch (dtype) {
+    case CUDNN_DATA_BOOLEAN:
+    case CUDNN_DATA_FP8_E4M3:
+    case CUDNN_DATA_FP8_E5M2:
+    case CUDNN_DATA_UINT8:
+    case CUDNN_DATA_INT8:
+      return 1;
+
+    case CUDNN_DATA_BFLOAT16:
+    case CUDNN_DATA_HALF:
+      return 2;
+
+    case CUDNN_DATA_INT32:
+    case CUDNN_DATA_INT8x4:
+    case CUDNN_DATA_UINT8x4:
+    case CUDNN_DATA_FLOAT:
+      return 4;
+
+    case CUDNN_DATA_INT64:
+    case CUDNN_DATA_DOUBLE:
+      return 8;
+
+    case CUDNN_DATA_INT8x32:
+      return 32;
+
+    default:
+      IREE_ASSERT(false && "unsupported data type");
+      return 0;
+  }
+}
+
 StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
     iree_allocator_t host_allocator, span<iree_hal_buffer_view_t* const> args) {
   ScopedCudnnStubs stubs(syms_);
@@ -291,22 +323,22 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
   // cuDNN kernel launches and result allocation. We skip it today, because
   // we know that we use cudaMallocManaged and a NULL CUDA stream.
 
-  // TODO(ezhulenev): Add support for all cuDNN data types.
-  IREE_ASSERT_EQ(result.getDataType(), CUDNN_DATA_FLOAT);
-  int64_t output_byte_length = result.getPackedElementCount() * sizeof(float);
+  int64_t result_byte_length =
+      result.getPackedElementCount() *
+      GetHostSize(static_cast<cudnnDataType_t>(result.getDataType()));
 
   vm::ref<iree_hal_buffer_t> result_buffer;
   IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
       device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
       iree_hal_semaphore_list_empty(), IREE_HAL_ALLOCATOR_POOL_DEFAULT,
-      result_buffer_params, output_byte_length, &result_buffer));
+      result_buffer_params, result_byte_length, &result_buffer));
 
   vm::ref<iree_hal_buffer_t> workspace_buffer;
   if (plan.getWorkspaceSize() > 0) {
     IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
         device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
         iree_hal_semaphore_list_empty(), IREE_HAL_ALLOCATOR_POOL_DEFAULT,
-        workspace_buffer_params, output_byte_length, &workspace_buffer));
+        workspace_buffer_params, plan.getWorkspaceSize(), &workspace_buffer));
   }
 
   // Wrap the result buffer into a buffer view that provides the metadata for
@@ -393,13 +425,109 @@ StatusOr<vm::ref<CudnnTensor>> CreateTensor(
 }
 
 //===----------------------------------------------------------------------===//
-// CreatePointwiseRelu
+// CreatePointwiseUnary
 //===----------------------------------------------------------------------===//
 
-StatusOr<vm::ref<CudnnTensor>> CreatePointwiseRelu(
-    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    double lower_clip, double upper_clip, int64_t uid, int64_t alignment,
+StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CudnnTensor& x, float alpha, int64_t uid, int64_t alignment,
     bool is_virtual) {
+  ScopedCudnnStubs stubs(syms);
+
+  auto compute_type = static_cast<cudnnDataType_t>(x.tensor().getDataType());
+
+  // Prepare tensor descriptor for the output.
+  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
+                                      .cloneFrom(x.tensor(), uid)
+                                      .setAlignment(alignment)
+                                      .setVirtual(is_virtual)
+                                      .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
+
+  // Prepare an operation descriptor.
+  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
+                                           .setMode(mode)
+                                           .setComputeType(compute_type)
+                                           .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
+
+  // Create a pointwise operation.
+  cudnn_frontend::Operation operation =
+      cudnn_frontend::OperationBuilder(
+          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
+          .setxDesc(x.tensor())
+          .setyDesc(tensor)
+          .setpwDesc(desc)
+          .setAlpha(alpha)
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
+
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
+      syms, {&x}, std::move(operation), std::move(tensor)));
+}
+
+//===----------------------------------------------------------------------===//
+// CreatePointwiseBinary
+//===----------------------------------------------------------------------===//
+
+StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
+    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
+    CudnnTensor& x, float alpha, CudnnTensor& b, float alpha2, int64_t uid,
+    int64_t alignment, bool is_virtual) {
+  ScopedCudnnStubs stubs(syms);
+
+  if (x.tensor().getDataType() != b.tensor().getDataType())
+    return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
+                            "pointwise binary operations do not support mixed "
+                            "lhs and rhs data type (%ld vs %ld)",
+                            x.tensor().getDataType(), b.tensor().getDataType());
+
+  auto compute_type = static_cast<cudnnDataType_t>(x.tensor().getDataType());
+
+  // TODO(ezhulenev): Pointwise operations in cuDNN do implicit broadcasting, so
+  // in general it's unsafe to clone `x` for the output. We have to compute the
+  // broadcasted shape with correct strides corresponding to the layout.
+
+  // Prepare tensor descriptor for the output.
+  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
+                                      .cloneFrom(x.tensor(), uid)
+                                      .setAlignment(alignment)
+                                      .setVirtual(is_virtual)
+                                      .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
+
+  // Prepare an operation descriptor.
+  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
+                                           .setMode(mode)
+                                           .setComputeType(compute_type)
+                                           .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
+
+  // Create a pointwise operation.
+  cudnn_frontend::Operation operation =
+      cudnn_frontend::OperationBuilder(
+          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
+          .setxDesc(x.tensor())
+          .setbDesc(b.tensor())
+          .setyDesc(tensor)
+          .setpwDesc(desc)
+          .setAlpha(alpha)
+          .setAlpha2(alpha2)
+          .build();
+  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
+
+  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
+      syms, {&x, &b}, std::move(operation), std::move(tensor)));
+}
+
+//===----------------------------------------------------------------------===//
+// CreateRelu
+//===----------------------------------------------------------------------===//
+
+StatusOr<vm::ref<CudnnTensor>> CreateRelu(openxla_cudnn_dynamic_symbols_t* syms,
+                                          CudnnTensor& input, double lower_clip,
+                                          double upper_clip, int64_t uid,
+                                          int64_t alignment, bool is_virtual) {
   ScopedCudnnStubs stubs(syms);
 
   // Prepare tensor descriptor for activation output.
@@ -433,92 +561,6 @@ StatusOr<vm::ref<CudnnTensor>> CreatePointwiseRelu(
 }
 
 //===----------------------------------------------------------------------===//
-// CreatePointwiseUnary
-//===----------------------------------------------------------------------===//
-
-StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CudnnTensor& x, float alpha, int64_t uid, int64_t alignment,
-    bool is_virtual) {
-  ScopedCudnnStubs stubs(syms);
-
-  // Prepare tensor descriptor for the output.
-  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
-                                      .cloneFrom(x.tensor(), uid)
-                                      .setAlignment(alignment)
-                                      .setVirtual(is_virtual)
-                                      .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
-
-  // Prepare an operation descriptor.
-  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
-                                           .setMode(mode)
-                                           .setComputeType(CUDNN_DATA_FLOAT)
-                                           .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
-
-  // Create a pointwise operation.
-  cudnn_frontend::Operation operation =
-      cudnn_frontend::OperationBuilder(
-          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-          .setxDesc(x.tensor())
-          .setyDesc(tensor)
-          .setpwDesc(desc)
-          .setAlpha(alpha)
-          .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
-
-  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
-      syms, {&x}, std::move(operation), std::move(tensor)));
-}
-
-//===----------------------------------------------------------------------===//
-// CreatePointwiseBinary
-//===----------------------------------------------------------------------===//
-
-StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
-    openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CudnnTensor& x, float alpha, CudnnTensor& b, float alpha2, int64_t uid,
-    int64_t alignment, bool is_virtual) {
-  ScopedCudnnStubs stubs(syms);
-
-  // TODO(ezhulenev): Pointwise operations in cuDNN do implicit broadcasting, so
-  // in general it's unsafe to clone `x` for the output. We have to compute the
-  // broadcasted shape with correct strides corresponding to the layout.
-
-  // Prepare tensor descriptor for the output.
-  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
-                                      .cloneFrom(x.tensor(), uid)
-                                      .setAlignment(alignment)
-                                      .setVirtual(is_virtual)
-                                      .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
-
-  // Prepare an operation descriptor.
-  cudnn_frontend::PointWiseDesc desc = cudnn_frontend::PointWiseDescBuilder()
-                                           .setMode(mode)
-                                           .setComputeType(CUDNN_DATA_FLOAT)
-                                           .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, desc.get_status()));
-
-  // Create a pointwise operation.
-  cudnn_frontend::Operation operation =
-      cudnn_frontend::OperationBuilder(
-          CUDNN_BACKEND_OPERATION_POINTWISE_DESCRIPTOR)
-          .setxDesc(x.tensor())
-          .setbDesc(b.tensor())
-          .setyDesc(tensor)
-          .setpwDesc(desc)
-          .setAlpha(alpha)
-          .setAlpha2(alpha2)
-          .build();
-  IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
-
-  return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
-      syms, {&x, &b}, std::move(operation), std::move(tensor)));
-}
-
-//===----------------------------------------------------------------------===//
 // CreateConvolution
 //===----------------------------------------------------------------------===//
 
@@ -542,40 +584,42 @@ static int64_t GetFwdConvOutputDim(int64_t tensor_dim, int64_t pre_padding,
 }
 
 StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
-    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& input,
-    CudnnTensor& filter, span<const int64_t> stride,
-    span<const int64_t> pre_padding, span<const int64_t> post_padding,
-    span<const int64_t> dilation, int64_t uid, int64_t alignment,
-    bool is_virtual, cudnnConvolutionMode_t mode) {
+    openxla_cudnn_dynamic_symbols_t* syms, CudnnTensor& x, CudnnTensor& w,
+    span<const int64_t> stride, span<const int64_t> pre_padding,
+    span<const int64_t> post_padding, span<const int64_t> dilation, int64_t uid,
+    int64_t alignment, bool is_virtual, cudnnConvolutionMode_t mode) {
   ScopedCudnnStubs stubs(syms);
 
-  span<const int64_t> input_dims(input->getDim(), input->getDimCount());
-  span<const int64_t> filter_dims(filter->getDim(), filter->getDimCount());
+  span<const int64_t> x_dims(x->getDim(), x->getDimCount());
+  span<const int64_t> w_dims(w->getDim(), w->getDimCount());
 
   // TODO(ezhulenev): Add support for 3-D convolutions.
   static constexpr int64_t kSpatialDims = 2;
 
-  if (input_dims.size() != 4) {
+  // TODO(ezhulenev): Add support for configurabe compute types.
+  auto compute_type = static_cast<cudnnDataType_t>(x.tensor().getDataType());
+
+  if (x_dims.size() != 4) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "3d convolution is not supported");
   }
 
-  if (input_dims.size() != filter_dims.size()) {
+  if (x_dims.size() != w_dims.size()) {
     return iree_make_status(
         IREE_STATUS_INVALID_ARGUMENT,
         "convolution input and filter must have the same rank");
   }
 
   // Compute convolution output dimensions.
-  std::vector<int64_t> output_dims = {input_dims[0], input_dims[1]};  // [N, C]
+  std::vector<int64_t> output_dims = {x_dims[0], x_dims[1]};  // [N, C]
   for (int d = 0; d < kSpatialDims; ++d) {
-    output_dims.push_back(
-        GetFwdConvOutputDim(input_dims[d + 2], pre_padding[d], post_padding[d],
-                            filter_dims[d + 2], stride[d], dilation[d]));
+    output_dims.push_back(GetFwdConvOutputDim(x_dims[d + 2], pre_padding[d],
+                                              post_padding[d], w_dims[d + 2],
+                                              stride[d], dilation[d]));
   }
 
   // Compute strides for output tensor based on input format.
-  bool is_nhwc = input->getStride()[1] == 1;
+  bool is_nhwc = x->getStride()[1] == 1;
   std::vector<int64_t> output_strides =
       is_nhwc ? GetChannelsLastStrides(output_dims)
               : GetRowMajorStrides(output_dims);
@@ -583,7 +627,7 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   // Prepare tensor descriptor for convolution output.
   cudnn_frontend::Tensor tensor =
       cudnn_frontend::TensorBuilder()
-          .cloneFrom(input.tensor(), uid)
+          .cloneFrom(x.tensor(), uid)
           .setAlignment(alignment)
           .setDim(output_dims.size(), output_dims.data())
           .setStride(output_strides.size(), output_strides.data())
@@ -594,7 +638,7 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   // Prepare a forward convolution descriptor.
   cudnn_frontend::ConvDesc convolution =
       cudnn_frontend::ConvDescBuilder()
-          .setComputeType(CUDNN_DATA_FLOAT)
+          .setComputeType(compute_type)
           .setMathMode(mode)
           .setSpatialDimCount(kSpatialDims)
           .setSpatialStride(kSpatialDims, stride.data())
@@ -608,8 +652,8 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   cudnn_frontend::Operation operation =
       cudnn_frontend::OperationBuilder(
           CUDNN_BACKEND_OPERATION_CONVOLUTION_FORWARD_DESCRIPTOR)
-          .setxDesc(input.tensor())
-          .setwDesc(filter.tensor())
+          .setxDesc(x.tensor())
+          .setwDesc(w.tensor())
           .setyDesc(tensor)
           .setcDesc(convolution)
           .setAlpha(1.0)
@@ -618,7 +662,7 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, operation.get_status()));
 
   return vm::ref<CudnnTensor>(new CudnnOpResultTensor(
-      syms, {&input, &filter}, std::move(operation), std::move(tensor)));
+      syms, {&x, &w}, std::move(operation), std::move(tensor)));
 }
 
 //===----------------------------------------------------------------------===//

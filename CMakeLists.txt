@@ -21,6 +21,9 @@ endif()
 
 set(IREE_CXX_STANDARD ${CMAKE_CXX_STANDARD})
 
+# Enable testing before any subdirectories are added.
+enable_testing()
+
 # Customize defaults.
 option(IREE_BUILD_COMPILER "Disable compiler for runtime-library build" ON)
 option(IREE_BUILD_SAMPLES "Disable samples for runtime-library build" OFF)

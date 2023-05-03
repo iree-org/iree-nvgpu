@@ -20,7 +20,7 @@ util.global @c : tensor<1x1x1x32xf32> = dense<0.5> : tensor<1x1x1x32xf32>
 util.global @w_1x1 : tensor<32x1x1x32xf32> = dense<1.0> : tensor<32x1x1x32xf32>
 
 cudnn.graph @conv2d_1x1(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
-                        %w: !cudnn.tensor<32x32x1x1xf32, NHWC>,
+                        %w: !cudnn.tensor<32x32x1x1xf32, KHWC>,
                         %b: !cudnn.tensor<8x32x4x4xf32, NHWC>,
                         %c: !cudnn.tensor<1x32x1x1xf32, NHWC>)
                          -> !cudnn.tensor<8x32x4x4xf32, NHWC> {
@@ -30,7 +30,7 @@ cudnn.graph @conv2d_1x1(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
          pre_padding=[0,0]
          post_padding=[0,0]
          dilation=[1,1]
-    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<32x32x1x1xf32, NHWC>)
+    : (!cudnn.tensor<8x32x4x4xf32, NHWC>, !cudnn.tensor<32x32x1x1xf32, KHWC>)
     -> !cudnn.tensor<8x32x4x4xf32, NHWC>
 
   %1 = cudnn.add(%0, %b) alpha=1.0 alpha2=0.75

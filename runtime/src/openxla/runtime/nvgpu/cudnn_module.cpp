@@ -48,6 +48,8 @@ struct NHWC {
   }
 };
 
+using KHWC = NHWC;
+
 //===----------------------------------------------------------------------===//
 // Cudnn module state encapsulates all the state required for running cuDNN
 // operations (launching cuDNN graphs on a stream) at run time
@@ -269,6 +271,7 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
     // Create cuDNN tensors
     MakeNativeFunction("tensor.create.4d", &State::TensorCreate<4>),
     MakeNativeFunction("tensor.create.4d.nhwc", &State::TensorCreate<4, NHWC>),
+    MakeNativeFunction("tensor.create.4d.khwc", &State::TensorCreate<4, KHWC>),
 
     // cuDNN handle operations
     MakeNativeFunction("handle", &State::Handle),

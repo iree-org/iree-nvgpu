@@ -131,25 +131,34 @@ def CUDNN_ConvolutionModeAttr
 // operations, that we define as an enum attribute to avoid always passing
 // around affine maps.
 
-// 4-D Tensor layouts.
+// 4-D input tensor layouts.
 //
-// In cuDNN 4-D tensors always have their logical dimensions as NCHW (batch,
-// channels aka feature maps, height, width). Tensor layout defines how these
-// logical dimensions layed out in memory.
+// In cuDNN 4-D input tensors always have their logical dimensions as NCHW
+// (batch, channels aka feature maps, height, width). Tensor layout defines how
+// these logical dimensions layed out in memory.
 //
 // Example:
 //   `!cudnn.tensor<1x64x32x32xf32, NHWC>` is equivalent to `memref<1x32x32x64>`
 //   physical memory layout
 //
-// NCHW tensor layout is a simple row-major layout.
-def CUDNN_LAYOUT_NCHW : I32EnumAttrCase<"NCHW", 1>;
+def CUDNN_LAYOUT_NCHW : I32EnumAttrCase<"NCHW", 1>;  // row major layout
 def CUDNN_LAYOUT_NHWC : I32EnumAttrCase<"NHWC", 2>;
+
+// 4-D filter tensor layouts (for convolution operation).
+//
+// In cuDNN 4-D filter tensors always have their logical dimensions as KCHW
+// (output feature maps, input feature maps, height, width). Filter tensor
+// layout must usually match the input tensor layout.
+def CUDNN_LAYOUT_KCHW : I32EnumAttrCase<"KCHW", 3>;  // row major layout
+def CUDNN_LAYOUT_KHWC : I32EnumAttrCase<"KHWC", 4>;  // corresponds to NHWC
 
 def CUDNN_Layout : I32EnumAttr<"Layout",
     "cuDNN data layout format",
     [
       CUDNN_LAYOUT_NCHW,
-      CUDNN_LAYOUT_NHWC
+      CUDNN_LAYOUT_NHWC,
+      CUDNN_LAYOUT_KCHW,
+      CUDNN_LAYOUT_KHWC
     ]> {
   let genSpecializedAttr = 0;
   let cppNamespace = "::openxla::compiler::nvgpu::cudnn";

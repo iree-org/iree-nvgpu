@@ -1,3 +1,13 @@
+// RUN: iree-compile --iree-plugin=openxla_nvgpu --iree-input-type=mhlo        \
+// RUN:              --iree-hal-target-backends=cuda %s                        \
+// RUN: | iree-run-module --module=- --device=cuda --function=run.conv2d_1x1   \
+// RUN: | FileCheck %s --check-prefix=CHECK_1X1
+
+// RUN: iree-compile --iree-plugin=openxla_nvgpu --iree-input-type=mhlo        \
+// RUN:              --iree-hal-target-backends=cuda %s                        \
+// RUN: | iree-run-module --module=- --device=cuda --function=run.conv2d_3x3   \
+// RUN: | FileCheck %s --check-prefix=CHECK_3X3
+
 module @example {
 
 util.global @handle : !cudnn.handle
@@ -19,6 +29,9 @@ util.global @c : tensor<1x1x1x32xf32> = dense<0.5> : tensor<1x1x1x32xf32>
 
 util.global @w_1x1 : tensor<32x1x1x32xf32> = dense<1.0> : tensor<32x1x1x32xf32>
 
+
+// CHECK_1X1: result[0]: hal.buffer_view
+// CHECK_1X1: 34 34 34 34 34 34 34 34 34
 cudnn.graph @conv2d_1x1(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
                         %w: !cudnn.tensor<32x32x1x1xf32, KHWC>,
                         %b: !cudnn.tensor<8x32x4x4xf32, NHWC>,
@@ -67,6 +80,10 @@ func.func @run.conv2d_1x1() -> tensor<8x4x4x32xf32> {
 
 util.global @w_3x3 : tensor<32x3x3x32xf32> = dense<1.0> : tensor<32x3x3x32xf32>
 
+// CHECK_3X3: result[0]: hal.buffer_view
+// CHECK_3X3: 130 130 130 130 130 130 130
+// CHECK_3X3: 194 194 194 194 194 194 194
+// CHECK_3x3: 290 290 290 290 290 290 290
 cudnn.graph @conv2d_3x3(%x: !cudnn.tensor<8x32x4x4xf32, NHWC>,
                         %w: !cudnn.tensor<32x32x3x3xf32, NHWC>,
                         %b: !cudnn.tensor<8x32x4x4xf32, NHWC>,

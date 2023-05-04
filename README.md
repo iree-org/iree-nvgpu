@@ -27,3 +27,24 @@ to the directory where the `openxla-nvgpu` compiler was checked out. Refer to
 the IREE [getting
 started](https://openxla.github.io/iree/building-from-source/getting-started/)
 guide for details of how to set this up.
+
+## Installing dependencies
+
+You must have a CUDA Toolkit installed together with a cuDNN ([see
+instructions](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html#installlinux-tar)).
+
+On Linux platform path to `libcudnn.so` should be added to `LD_LIBRARY_PATH`.
+
+```
+export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64
+```
+
+## Running cuDNN runtime tests
+
+Some of the tests can run only on an Ampere+ devices because they rely on the
+[cuDNN runtime fusion engine](https://docs.nvidia.com/deeplearning/cudnn/developer-guide/index.html#runtime-fusion-engine).
+
+```
+cmake --build build
+ctest --test-dir build -R openxla/runtime/nvgpu/test/
+```

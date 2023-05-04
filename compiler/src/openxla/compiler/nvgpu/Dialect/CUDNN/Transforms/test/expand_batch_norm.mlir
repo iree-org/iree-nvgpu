@@ -1,6 +1,6 @@
 // RUN: iree-opt %s --iree-plugin=openxla_nvgpu --split-input-file \
-// RUN:   --pass-pipeline='builtin.module(openxla-nvgpu-expand-cudnn-operations)' \
-// RUN:   | FileCheck %s
+// RUN:   --openxla-nvgpu-expand-cudnn-operations | \
+// RUN: FileCheck %s
 
 cudnn.graph @batch_norm_inference(
   %x: !cudnn.tensor<8x32x4x4xf32, NHWC>,

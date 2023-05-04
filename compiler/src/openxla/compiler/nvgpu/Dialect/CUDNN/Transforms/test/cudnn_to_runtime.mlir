@@ -1,6 +1,6 @@
 // RUN: iree-opt %s --iree-plugin=openxla_nvgpu --split-input-file \
-// RUN:   --pass-pipeline='builtin.module(openxla-nvgpu-convert-cudnn-to-runtime)' \
-// RUN:   | FileCheck %s
+// RUN:   --openxla-nvgpu-convert-cudnn-to-runtime | \
+// RUN: FileCheck %s
 
 cudnn.graph @graph(%arg0: !cudnn.tensor<1x4x8xf32>)
                        -> !cudnn.tensor<1x4x8xf32> {

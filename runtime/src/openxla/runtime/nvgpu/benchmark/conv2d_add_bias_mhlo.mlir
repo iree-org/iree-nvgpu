@@ -1,9 +1,12 @@
-module @example {
+// RUN: iree-compile --compile-to=vm --iree-plugin=openxla_nvgpu               \
+// RUN:              --iree-input-type=mhlo --iree-hal-target-backends=cuda %s \
+// RUN: | FileCheck %s
 
 //===-----------------------------------------------------------------------===/
 // 1x1 convolution
 //===-----------------------------------------------------------------------===/
 
+// CHECK: vm.func private @conv2d_1x1
 func.func @conv2d_1x1(
   %x: tensor<8x256x256x32xf32>,
   %w: tensor<1x1x32x32xf32>,
@@ -43,6 +46,7 @@ func.func @conv2d_1x1(
 // 3x3 convolution
 //===-----------------------------------------------------------------------===/
 
+// CHECK: vm.func private @conv2d_3x3
 func.func @conv2d_3x3(
   %x: tensor<8x256x256x32xf32>,
   %w: tensor<3x3x32x32xf32>,
@@ -76,6 +80,4 @@ func.func @conv2d_3x3(
   %3 = mhlo.add %1, %2 : tensor<8x256x256x32xf32>
 
   return %3 : tensor<8x256x256x32xf32>
-}
-
 }

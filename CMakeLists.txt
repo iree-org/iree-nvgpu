@@ -37,6 +37,19 @@ option(IREE_TARGET_BACKEND_CUDA "Enables CUDA target backend" ON)
 option(IREE_COMPILER_BUILD_SHARED_LIBS "Enables shared libraries in the compiler by default" ON)
 
 #-------------------------------------------------------------------------------
+# Customize IREE LIT test runner.
+#-------------------------------------------------------------------------------
+
+# TODO(ezhulenev): Python3 executable and LLVM LIT are required for running lit
+# tests under `runtime` folder. Figure out how to initialize them as a part of
+# `iree_setup_toolchain` invoked below.
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+
+set(IREE_TEST_TMPDIR_ROOT "${CMAKE_CURRENT_BINARY_DIR}/test_tmpdir")
+set(LLVM_EXTERNAL_LIT "${IREE_ROOT_DIR}/third_party/llvm-project/llvm/utils/lit/lit.py")
+
+#-------------------------------------------------------------------------------
 # Add OpenXLA Nvgpu compiler plugin to IREE compiler tools.
 #-------------------------------------------------------------------------------
 

@@ -1,11 +1,10 @@
 // RUN: iree-compile --iree-plugin=openxla_nvgpu --iree-input-type=mhlo        \
-// RUN:              --iree-hal-target-backends=cuda %s                        \
-// RUN: | iree-run-module --module=- --device=cuda --function=run.conv2d_1x1   \
+// RUN:              --iree-hal-target-backends=cuda %s > %t
+
+// RUN: iree-run-module --module=%t --device=cuda --function=run.conv2d_1x1    \
 // RUN: | FileCheck %s --check-prefix=CHECK_1X1
 
-// RUN: iree-compile --iree-plugin=openxla_nvgpu --iree-input-type=mhlo        \
-// RUN:              --iree-hal-target-backends=cuda %s                        \
-// RUN: | iree-run-module --module=- --device=cuda --function=run.conv2d_3x3   \
+// RUN: iree-run-module --module=%t --device=cuda --function=run.conv2d_3x3    \
 // RUN: | FileCheck %s --check-prefix=CHECK_3X3
 
 util.global @handle : !cudnn.handle

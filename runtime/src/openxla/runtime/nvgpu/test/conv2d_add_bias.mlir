@@ -8,8 +8,6 @@
 // RUN: | iree-run-module --module=- --device=cuda --function=run.conv2d_3x3   \
 // RUN: | FileCheck %s --check-prefix=CHECK_3X3
 
-module @example {
-
 util.global @handle : !cudnn.handle
 
 util.initializer {
@@ -28,7 +26,6 @@ util.global @c : tensor<1x1x1x32xf32> = dense<0.5> : tensor<1x1x1x32xf32>
 //===-----------------------------------------------------------------------===/
 
 util.global @w_1x1 : tensor<32x1x1x32xf32> = dense<1.0> : tensor<32x1x1x32xf32>
-
 
 // CHECK_1X1: result[0]: hal.buffer_view
 // CHECK_1X1: 34 34 34 34 34 34 34 34 34
@@ -124,6 +121,4 @@ func.func @run.conv2d_3x3() -> tensor<8x4x4x32xf32> {
        -> tensor<8x4x4x32xf32>
 
   return %0 : tensor<8x4x4x32xf32>
-}
-
 }

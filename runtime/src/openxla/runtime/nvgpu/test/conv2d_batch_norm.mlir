@@ -47,7 +47,7 @@ util.global @variance : tensor<1x1x1x32xf32> = dense<0.2> : tensor<1x1x1x32xf32>
 util.global @epsilon : tensor<1x1x1x1xf32> = dense<0.0001> : tensor<1x1x1x1xf32>
 
 // CHECK: result[0]: hal.buffer_view
-// CHECK: 32 32 32 32 32 32 32 32 32
+// CHECK: 36.4887 36.4887 36.4887 36.4887 36.4887
 func.func @main() -> tensor<8x4x4x32xf32> {
   %x = util.global.load @x : tensor<8x4x4x32xf32>
   %w = util.global.load @w : tensor<32x1x1x32xf32>

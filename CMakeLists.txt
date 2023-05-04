@@ -47,7 +47,7 @@ option(IREE_COMPILER_BUILD_SHARED_LIBS "Enables shared libraries in the compiler
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 set(IREE_TEST_TMPDIR_ROOT "${CMAKE_CURRENT_BINARY_DIR}/test_tmpdir")
-set(LLVM_EXTERNAL_LIT "${IREE_SOURCE_DIR}/third_party/llvm-project/llvm/utils/lit/lit.py")
+set(LLVM_EXTERNAL_LIT "${IREE_ROOT_DIR}/third_party/llvm-project/llvm/utils/lit/lit.py")
 
 #-------------------------------------------------------------------------------
 # Add OpenXLA Nvgpu compiler plugin to IREE compiler tools.

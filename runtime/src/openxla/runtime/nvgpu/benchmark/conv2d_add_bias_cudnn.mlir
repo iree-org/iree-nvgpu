@@ -1,4 +1,6 @@
-module @example {
+// RUN: iree-compile --compile-to=vm --iree-plugin=openxla_nvgpu               \
+// RUN:              --iree-input-type=mhlo --iree-hal-target-backends=cuda %s \
+// RUN: | FileCheck %s
 
 util.global @handle : !cudnn.handle
 
@@ -13,6 +15,7 @@ util.initializer {
 // 1x1 convolution
 //===-----------------------------------------------------------------------===/
 
+// CHECK: vm.func private @cudnn.conv2d_1x1.builder
 cudnn.graph @cudnn.conv2d_1x1(%x: !cudnn.tensor<8x32x256x256xf32, NHWC>,
                               %w: !cudnn.tensor<32x32x1x1xf32, NHWC>,
                               %b: !cudnn.tensor<8x32x256x256xf32, NHWC>,
@@ -41,6 +44,7 @@ cudnn.graph @cudnn.conv2d_1x1(%x: !cudnn.tensor<8x32x256x256xf32, NHWC>,
   cudnn.return %2: !cudnn.tensor<8x32x256x256xf32, NHWC>
 }
 
+// CHECK: vm.func private @conv2d_1x1
 func.func @conv2d_1x1(
   %x: tensor<8x256x256x32xf32>,
   %w: tensor<32x1x1x32xf32>,
@@ -64,6 +68,7 @@ func.func @conv2d_1x1(
 // 3x3 convolution
 //===-----------------------------------------------------------------------===/
 
+// CHECK: vm.func private @cudnn.conv2d_3x3.builder
 cudnn.graph @cudnn.conv2d_3x3(%x: !cudnn.tensor<8x32x256x256xf32, NHWC>,
                               %w: !cudnn.tensor<32x32x3x3xf32, NHWC>,
                               %b: !cudnn.tensor<8x32x256x256xf32, NHWC>,
@@ -92,6 +97,7 @@ cudnn.graph @cudnn.conv2d_3x3(%x: !cudnn.tensor<8x32x256x256xf32, NHWC>,
   cudnn.return %2: !cudnn.tensor<8x32x256x256xf32, NHWC>
 }
 
+// CHECK: vm.func private @conv2d_3x3
 func.func @conv2d_3x3(
   %x: tensor<8x256x256x32xf32>,
   %w: tensor<32x3x3x32xf32>,
@@ -109,6 +115,4 @@ func.func @conv2d_3x3(
   %1 = mhlo.sqrt %0 : tensor<8x256x256x32xf32>
 
   return %0 : tensor<8x256x256x32xf32>
-}
-
 }

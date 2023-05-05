@@ -674,11 +674,6 @@ StatusOr<vm::ref<CudnnHandle>> CreateHandle(
   IREE_ASSERT_ARGUMENT(device);
   cudnnHandle_t handle = {0};
 
-  if (!iree_hal_cuda_device_isa(device))
-    return iree_make_status(
-        IREE_STATUS_INVALID_ARGUMENT,
-        "HAL device must be a CUDA device to create cuDNN handle");
-
   CUcontext ctx = iree_hal_cuda_device_context(device);
   // TODO: We must guarantee that `ctx` is current when we create cuDNN
   // handle. Currently we rely on implicit guarantee that module is loaded

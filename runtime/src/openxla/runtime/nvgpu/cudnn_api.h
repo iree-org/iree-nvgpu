@@ -256,13 +256,13 @@ iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
 // Helper functions for setting up cuDNN descriptors
 //===----------------------------------------------------------------------===//
 
-// Get strides for row major storage format (in cuDNN NCHW, NCDHW are considered
-// to be the row-major formats for 4-D and 5-D tensors).
-std::vector<int64_t> GetRowMajorStrides(iree::span<const int64_t> dims);
+// Returns the dimension permutation computed from the strides.
+std::vector<int64_t> GetDimensionPermutation(iree::span<const int64_t> strides);
 
-// Compute strides for channels last storage format (NHWC, NDHWC). Can be
-// computed only for 4-D or 5-D tensors.
-std::vector<int64_t> GetChannelsLastStrides(iree::span<const int64_t> dims);
+// Returns strides for the tensor of given dimensions permuted according to the
+// given permutation vector.
+std::vector<int64_t> GetStrides(iree::span<const int64_t> dims,
+                                iree::span<const int64_t> perm);
 
 }  // namespace openxla::runtime::nvgpu
 

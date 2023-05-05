@@ -30,6 +30,7 @@ using namespace iree;
 
 template <size_t n>
 static std::array<int64_t, n> ToArr(span<const int64_t> span) {
+  IREE_ASSERT_EQ(span.size(), n);
   std::array<int64_t, n> arr;
   std::copy_n(span.begin(), n, arr.begin());
   return arr;
@@ -38,13 +39,15 @@ static std::array<int64_t, n> ToArr(span<const int64_t> span) {
 struct RowMajor {
   template <size_t n>
   static std::array<int64_t, n> strides(std::array<int64_t, n> dims) {
-    return ToArr<n>(GetRowMajorStrides(dims));
+    std::array<int64_t, n> identity;
+    std::iota(identity.begin(), identity.end(), 0);
+    return ToArr<n>(GetStrides(dims, identity));
   }
 };
 
 struct NHWC {
   static std::array<int64_t, 4> strides(std::array<int64_t, 4> dims) {
-    return ToArr<4>(GetChannelsLastStrides(dims));
+    return ToArr<4>(GetStrides(dims, {0, 2, 3, 1}));
   }
 };
 

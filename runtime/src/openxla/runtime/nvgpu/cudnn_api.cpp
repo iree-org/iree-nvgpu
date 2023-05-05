@@ -227,18 +227,14 @@ static std::vector<CUdeviceptr> GetDevicePointers(
 // they become a row major buffers.
 static std::vector<iree_host_size_t> GetResultShape(
     const cudnn_frontend::Tensor& result) {
-  const int64_t* dim = result.getDim();
-  const int64_t* stride = result.getStride();
+  span<const int64_t> dims(result.getDim(), result.getDimCount());
+  span<const int64_t> strides(result.getStride(), result.getDimCount());
 
-  std::vector<int64_t> indices(result.getDimCount());
-  std::iota(indices.begin(), indices.end(), 0);
-  std::sort(indices.begin(), indices.end(),
-            [&](int64_t a, int64_t b) { return stride[a] > stride[b]; });
+  std::vector<int64_t> perm = GetDimensionPermutation(strides);
+  std::vector<iree_host_size_t> shape(result.getDimCount());
+  for (size_t i = 0; i < perm.size(); ++i) shape[i] = dims[perm[i]];
 
-  std::vector<iree_host_size_t> dims(result.getDimCount());
-  for (size_t i = 0; i < indices.size(); ++i) dims[i] = dim[indices[i]];
-
-  return dims;
+  return shape;
 }
 
 static size_t GetHostSize(cudnnDataType_t dtype) {
@@ -484,16 +480,51 @@ StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
 
   auto compute_type = static_cast<cudnnDataType_t>(x.tensor().getDataType());
 
-  // TODO(ezhulenev): Pointwise operations in cuDNN do implicit broadcasting, so
-  // in general it's unsafe to clone `x` for the output. We have to compute the
-  // broadcasted shape with correct strides corresponding to the layout.
+  span<const int64_t> x_dims(x->getDim(), x->getDimCount());
+  span<const int64_t> b_dims(b->getDim(), b->getDimCount());
+
+  span<const int64_t> x_strides(x->getStride(), x->getDimCount());
+  span<const int64_t> b_strides(b->getStride(), b->getDimCount());
+
+  // Compute output shape by doing implicit broadcasting.
+  std::vector<int64_t> output_dims(x_dims.size());
+  for (unsigned d = 0; d < x_dims.size(); ++d) {
+    if (x_dims[d] != b_dims[d] && !(x_dims[d] == 1 || b_dims[d] == 1)) {
+      return iree_make_status(
+          IREE_STATUS_INVALID_ARGUMENT,
+          "input dimension %d is not broadcastable: %ld vs %ld", d, x_dims[d],
+          b_dims[d]);
+    }
+    output_dims[d] = std::max(x_dims[d], b_dims[d]);
+  }
+
+  // TODO(ezhulenev): If `x` or `b` has multiple dimensions of size 1 one after
+  // another, it's possible that we'll get different permutations for `x` and
+  // `b`. We pick the lexicographically larger permutation, because in practice
+  // in cuDNN we only change the order of a channel dimension, and every other
+  // dimension will be in its logical order (we use stable sort when we get
+  // permutations from strides), and we guaranteed to always get a correct
+  // permutation. We might need a more general solution here.
+  std::vector<int64_t> x_permutation = GetDimensionPermutation(x_strides);
+  std::vector<int64_t> b_permutation = GetDimensionPermutation(b_strides);
+  span<const int64_t> output_permutation =
+      std::lexicographical_compare(x_permutation.begin(), x_permutation.end(),
+                                   b_permutation.begin(), b_permutation.end())
+          ? b_permutation
+          : x_permutation;
+
+  std::vector<int64_t> output_strides =
+      GetStrides(output_dims, output_permutation);
 
   // Prepare tensor descriptor for the output.
-  cudnn_frontend::Tensor tensor = cudnn_frontend::TensorBuilder()
-                                      .cloneFrom(x.tensor(), uid)
-                                      .setAlignment(alignment)
-                                      .setVirtual(is_virtual)
-                                      .build();
+  cudnn_frontend::Tensor tensor =
+      cudnn_frontend::TensorBuilder()
+          .cloneFrom(x.tensor(), uid)
+          .setDim(output_dims.size(), output_dims.data())
+          .setStride(output_strides.size(), output_strides.data())
+          .setAlignment(alignment)
+          .setVirtual(is_virtual)
+          .build();
   IREE_RETURN_IF_ERROR(CUDNN_CONVERT_STATUS(syms, tensor.get_status()));
 
   // Prepare an operation descriptor.
@@ -593,6 +624,8 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   span<const int64_t> x_dims(x->getDim(), x->getDimCount());
   span<const int64_t> w_dims(w->getDim(), w->getDimCount());
 
+  span<const int64_t> x_strides(x->getStride(), x->getDimCount());
+
   // TODO(ezhulenev): Add support for 3-D convolutions.
   static constexpr int64_t kSpatialDims = 2;
 
@@ -618,11 +651,9 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
                                               stride[d], dilation[d]));
   }
 
-  // Compute strides for output tensor based on input format.
-  bool is_nhwc = x->getStride()[1] == 1;
-  std::vector<int64_t> output_strides =
-      is_nhwc ? GetChannelsLastStrides(output_dims)
-              : GetRowMajorStrides(output_dims);
+  // Compute strides for output tensor based on the input permutation.
+  std::vector<int64_t> x_permutation = GetDimensionPermutation(x_strides);
+  std::vector<int64_t> output_strides = GetStrides(output_dims, x_permutation);
 
   // Prepare tensor descriptor for convolution output.
   cudnn_frontend::Tensor tensor =
@@ -816,22 +847,23 @@ iree::StatusOr<iree::vm::ref<CudnnExecutable>> CreateExecutable(
 // Helper functions for setting up cuDNN descriptors
 //===----------------------------------------------------------------------===//
 
-std::vector<int64_t> GetRowMajorStrides(span<const int64_t> dims) {
-  std::vector<int64_t> strides(dims.size(), 1);
-  for (int64_t d = dims.size() - 2; d >= 0; --d)
-    strides[d] = dims[d] * strides[d + 1];
-  return strides;
+std::vector<int64_t> GetDimensionPermutation(span<const int64_t> strides) {
+  std::vector<int64_t> permutation(strides.size());
+  std::iota(permutation.begin(), permutation.end(), 0);
+  std::stable_sort(
+      permutation.begin(), permutation.end(),
+      [&](int64_t a, int64_t b) { return strides[a] > strides[b]; });
+  return permutation;
 }
 
-std::vector<int64_t> GetChannelsLastStrides(span<const int64_t> dims) {
-  IREE_ASSERT(dims.size() == 4 || dims.size() == 5);
+std::vector<int64_t> GetStrides(span<const int64_t> dims,
+                                span<const int64_t> perm) {
+  IREE_ASSERT_EQ(dims.size(), perm.size());
+
   std::vector<int64_t> strides(dims.size(), 1);
-  strides[1] = 1;
-  strides[dims.size() - 1] = strides[1] * dims[1];
-  for (int64_t d = dims.size() - 2; d >= 2; --d) {
-    strides[d] = strides[d + 1] * dims[d + 1];
-  }
-  strides[0] = strides[2] * dims[2];
+  for (int64_t d = strides.size() - 2; d >= 0; --d)
+    strides[perm[d]] = dims[perm[d + 1]] * strides[perm[d + 1]];
+
   return strides;
 }
 

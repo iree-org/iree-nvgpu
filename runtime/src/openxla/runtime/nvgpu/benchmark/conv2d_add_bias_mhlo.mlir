@@ -14,9 +14,9 @@ func.func @conv2d_1x1(
   %c: tensor<32xf32>
 ) -> tensor<8x256x256x32xf32> {
 
-  %0 = "mhlo.convolution"(%x, %w) {
+  %0 = "stablehlo.convolution"(%x, %w) {
     batch_group_count = 1 : i64,
-    dimension_numbers = #mhlo.conv<raw
+    dimension_numbers = #stablehlo.conv<raw
       input_batch_dimension = 0,
       input_feature_dimension = 3,
       input_spatial_dimensions = [1, 2],
@@ -33,11 +33,11 @@ func.func @conv2d_1x1(
   } : (tensor<8x256x256x32xf32>, tensor<1x1x32x32xf32>)
     -> tensor<8x256x256x32xf32>
 
-  %1 = mhlo.add %0, %b : tensor<8x256x256x32xf32>
-  %2 = "mhlo.broadcast_in_dim"(%c)
+  %1 = stablehlo.add %0, %b : tensor<8x256x256x32xf32>
+  %2 = "stablehlo.broadcast_in_dim"(%c)
         { broadcast_dimensions = dense<3> : tensor<1xi64> }
         : (tensor<32xf32>) -> tensor<8x256x256x32xf32>
-  %3 = mhlo.add %1, %2 : tensor<8x256x256x32xf32>
+  %3 = stablehlo.add %1, %2 : tensor<8x256x256x32xf32>
 
   return %3 : tensor<8x256x256x32xf32>
 }
@@ -54,9 +54,9 @@ func.func @conv2d_3x3(
   %c: tensor<32xf32>
 ) -> tensor<8x256x256x32xf32> {
 
-  %0 = "mhlo.convolution"(%x, %w) {
+  %0 = "stablehlo.convolution"(%x, %w) {
     batch_group_count = 1 : i64,
-    dimension_numbers = #mhlo.conv<raw
+    dimension_numbers = #stablehlo.conv<raw
       input_batch_dimension = 0,
       input_feature_dimension = 3,
       input_spatial_dimensions = [1, 2],
@@ -73,11 +73,11 @@ func.func @conv2d_3x3(
   } : (tensor<8x256x256x32xf32>, tensor<3x3x32x32xf32>)
     -> tensor<8x256x256x32xf32>
 
-  %1 = mhlo.add %0, %b : tensor<8x256x256x32xf32>
-  %2 = "mhlo.broadcast_in_dim"(%c)
+  %1 = stablehlo.add %0, %b : tensor<8x256x256x32xf32>
+  %2 = "stablehlo.broadcast_in_dim"(%c)
         { broadcast_dimensions = dense<3> : tensor<1xi64> }
         : (tensor<32xf32>) -> tensor<8x256x256x32xf32>
-  %3 = mhlo.add %1, %2 : tensor<8x256x256x32xf32>
+  %3 = stablehlo.add %1, %2 : tensor<8x256x256x32xf32>
 
   return %3 : tensor<8x256x256x32xf32>
 }

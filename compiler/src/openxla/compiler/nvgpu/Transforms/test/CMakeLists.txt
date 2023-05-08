@@ -8,7 +8,7 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
-    "example.mlir"
+    "hlo_to_cudnn.mlir"
   TOOLS
     FileCheck
     iree-compile

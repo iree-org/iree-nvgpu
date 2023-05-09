@@ -49,9 +49,8 @@ def create_simple_mul_module(instance):
         return %0 : tensor<8x4x4x32xf32>
       }
     }""",
-      target_backends=["cuda"],
-      extra_args=["--iree-plugin=openxla_nvgpu"]
-  )
+                                     target_backends=["cuda"],
+                                     extra_args=["--iree-plugin=openxla_nvgpu"])
   m = iree.runtime.VmModule.from_flatbuffer(instance, binary)
   return m
 
@@ -69,12 +68,30 @@ class Conv2DTest(unittest.TestCase):
     self.assertEqual(ctx.modules.conv2d.name, "conv2d")
     f = ctx.modules.conv2d["main"]
 
-    x = np.ones((8, 4, 4, 32), dtype=np.float32)
-    w = np.ones((32, 3, 3, 32), dtype=np.float32)
+    np.random.seed(0)
+
+    x = np.random.randn(8, 4, 4, 32).astype(np.float32)
+    w = np.random.randn(32, 3, 3, 32).astype(np.float32)
+
+    x[np.abs(x) < 1.5] = 1.0
+    w[np.abs(w) < 1.5] = 1.0
+
     result = f(x, w)
 
-    # TODO(ezhulenev): Add conv2d reference implementation.
-    print(np.array(result))
+    # Compute expected result with numpy
+    x_padded = np.pad(x, ((0, 0), (1, 1), (1, 1), (0, 0)))
+    expected_result = np.zeros((8, 4, 4, 32))
+
+    for n in range(8):
+      for i in range(4):
+        for j in range(4):
+          for k in range(32):
+            expected_result[n, i, j, k] = np.dot(
+                x_padded[n, i:i + 3, j:j + 3, :].flatten(),
+                w[k, :, :, :].flatten())
+
+    np.testing.assert_allclose(expected_result, result, rtol=1e-3, atol=1e-2)
+
 
 if __name__ == "__main__":
   logging.basicConfig(level=logging.DEBUG)

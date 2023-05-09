@@ -388,6 +388,8 @@ extern "C" iree_status_t openxla_nvgpu_cudnn_module_create(
     iree_vm_module_t** out_module) {
   IREE_ASSERT_ARGUMENT(out_module);
 
+  openxla_nvgpu_cudnn_module_register_types(instance);
+
   auto module = std::make_unique<CudnnModule>(instance, host_allocator);
   *out_module = module.release()->interface();
 

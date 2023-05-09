@@ -1,6 +1,6 @@
-// RUN: iree-opt %s --iree-plugin=openxla_nvgpu \
-// RUN:     --openxla-nvgpu-convert-hlo-to-cudnn | \
-// RUN: FileCheck %s
+// RUN: iree-opt %s --iree-plugin=openxla_nvgpu                                \
+// RUN:     --openxla-nvgpu-convert-hlo-to-cudnn                               \
+// RUN: | FileCheck %s
 
 !tensor = tensor<1x16x32x8xf32>
 

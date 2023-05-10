@@ -122,6 +122,7 @@ static FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
   }
   return min;
 }
+
 // Returns whether 'op' can be converted to cudnn.convolution.
 LogicalResult matchConv(stablehlo::ConvolutionOp op,
                         PatternRewriter& rewriter) {
@@ -209,6 +210,7 @@ static LogicalResult convertClamp(stablehlo::ClampOp op,
                                       APFloat(minOr->convertToDouble()));
   return success();
 }
+
 // Converts convolution 'op' into a cudnn.convolution.
 static LogicalResult convertConv(stablehlo::ConvolutionOp op,
                                  PatternRewriter& rewriter) {
@@ -224,18 +226,27 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
 
   uint32_t spatialDimCount =
       op.getDimensionNumbers().getInputSpatialDimensions().size();
-  auto getAttrOr = [spatialDimCount](std::optional<DenseIntElementsAttr> attr,
-                                     int64_t value) {
-    if (!attr) return SmallVector<int64_t>(spatialDimCount, value);
-    SmallVector<int64_t> values;
-    llvm::transform(attr->getValues<APInt>(), std::back_inserter(values),
-                    [](APInt stride) { return stride.getSExtValue(); });
-    return values;
+  auto getAttrOr = [](std::optional<DenseIntElementsAttr> attr, int64_t size,
+                      int64_t value) -> SmallVector<int64_t> {
+    if (!attr) return SmallVector<int64_t>(size, value);
+    return llvm::to_vector(llvm::map_range(
+        attr->getValues<APInt>(), [](APInt it) { return it.getSExtValue(); }));
   };
-  SmallVector<int64_t> spatialStride = getAttrOr(op.getWindowStrides(), 1);
-  SmallVector<int64_t> prePadding = getAttrOr(op.getPadding(), 0);
-  SmallVector<int64_t> postPadding(spatialDimCount, 0);
-  SmallVector<int64_t> dilation = getAttrOr(op.getRhsDilation(), 1);
+  SmallVector<int64_t> spatialStride =
+      getAttrOr(op.getWindowStrides(), spatialDimCount, 1);
+  SmallVector<int64_t> dilation =
+      getAttrOr(*op.getRhsDilation(), spatialDimCount, 1);
+
+  SmallVector<int64_t> padding =
+      getAttrOr(op.getPadding(), 2 * spatialDimCount, 0);
+  assert(padding.size() == 2 * spatialDimCount);
+  SmallVector<int64_t> prePadding, postPadding;
+  prePadding.reserve(spatialDimCount);
+  postPadding.reserve(spatialDimCount);
+  for (int64_t i = 0; i < spatialDimCount; ++i) {
+    prePadding.push_back(padding[2 * i]);
+    postPadding.push_back(padding[2 * i + 1]);
+  }
 
   rewriter.replaceOpWithNewOp<ConvolutionOp>(
       op, resultType, lhs, rhs, alpha, beta, spatialDimCount, spatialStride,

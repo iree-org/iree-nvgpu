@@ -4,13 +4,13 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef OPENXLA_RUNTIME_NVGPU_STATUS_UTIL_H_
-#define OPENXLA_RUNTIME_NVGPU_STATUS_UTIL_H_
+#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_STATUS_UTIL_H_
+#define OPENXLA_RUNTIME_NVGPU_CUDNN_STATUS_UTIL_H_
 
 #include <stdint.h>
 
 #include "iree/base/api.h"
-#include "openxla/runtime/nvgpu/dynamic_symbols.h"
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbols.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,4 +58,4 @@ iree_status_t openxla_cudnn_status_to_status(
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // OPENXLA_RUNTIME_NVGPU_STATUS_UTIL_H_
+#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_STATUS_UTIL_H_

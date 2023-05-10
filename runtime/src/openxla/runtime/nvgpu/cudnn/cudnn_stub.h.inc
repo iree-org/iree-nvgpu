@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/runtime/nvgpu/cudnn_stub.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_stub.h"
 
 #ifdef __cplusplus
 extern "C" {

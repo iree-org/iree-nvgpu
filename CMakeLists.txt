@@ -63,7 +63,7 @@ set(IREE_EXTERNAL_TOOLING_MODULES "cudnn" CACHE STRING "OpenXLA Nvgpu cuDNN modu
 
 set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime/src/openxla/runtime/nvgpu" CACHE STRING "OpenXLA Nvgpu cuDNN module source dir")
 set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/runtime/src/openxla/runtime/nvgpu" CACHE STRING "OpenXLA Nvgpu cuDNN module binary dir")
-set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_TARGET "openxla_runtime_nvgpu_cudnn_module" CACHE STRING "OpenXLA Nvgpu cuDNN module target")
+set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_TARGET "openxla_runtime_nvgpu_cudnn_cudnn_module" CACHE STRING "OpenXLA Nvgpu cuDNN module target")
 set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_NAME "cudnn" CACHE STRING "OpenXLA Nvgpu cuDNN module name")
 set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_REGISTER_TYPES "openxla_nvgpu_cudnn_module_register_types" CACHE STRING "OpenXLA Nvgpu cuDNN module type registration")
 set(IREE_EXTERNAL_TOOLING_MODULE_CUDNN_CREATE "openxla_nvgpu_cudnn_module_create" CACHE STRING "OpenXLA Nvgpu cuDNN module creator")

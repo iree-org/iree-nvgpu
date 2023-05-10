@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/runtime/nvgpu/cudnn_module.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_module.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -16,9 +16,9 @@
 #include "iree/vm/dynamic/api.h"
 #include "iree/vm/native_module_cc.h"
 #include "iree/vm/ref_cc.h"
-#include "openxla/runtime/nvgpu/cudnn_api.h"
-#include "openxla/runtime/nvgpu/dynamic_symbols.h"
-#include "openxla/runtime/nvgpu/status_util.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_api.h"
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbols.h"
+#include "openxla/runtime/nvgpu/cudnn/status_util.h"
 
 namespace openxla::runtime::nvgpu {
 

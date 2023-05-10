@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/runtime/nvgpu/dynamic_symbols.h"
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbols.h"
 
 #include <string.h>
 
@@ -45,7 +45,7 @@ static iree_status_t openxla_cudnn_dynamic_symbols_resolve_all(
         syms->cudnn_library, kName, (void**)&syms->cuDNNSymbolName)); \
   }
 
-#include "openxla/runtime/nvgpu/dynamic_symbol_tables.h"  // IWYU pragma: export
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbol_tables.h"  // IWYU pragma: export
 
 #undef CUDNN_PFN_DECL
 #undef CUDNN_PFN_DECL_STR_RETURN

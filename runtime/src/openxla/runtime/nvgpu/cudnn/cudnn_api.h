@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
-#define OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
+#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_API_H_
+#define OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_API_H_
 
 #define NV_CUDNN_DISABLE_EXCEPTION
 
@@ -19,8 +19,8 @@
 #include "iree/hal/drivers/cuda/dynamic_symbols.h"
 #include "iree/vm/api.h"
 #include "iree/vm/ref_cc.h"
-#include "openxla/runtime/nvgpu/cudnn_headers.h"
-#include "openxla/runtime/nvgpu/dynamic_symbols.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_headers.h"
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbols.h"
 
 namespace openxla::runtime::nvgpu {
 
@@ -279,4 +279,4 @@ IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_operation_graph,
 IREE_VM_DECLARE_TYPE_ADAPTERS(cudnn_executable,
                               openxla::runtime::nvgpu::CudnnExecutable);
 
-#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_API_H_
+#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_API_H_

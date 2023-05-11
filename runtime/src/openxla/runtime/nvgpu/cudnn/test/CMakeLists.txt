@@ -17,6 +17,7 @@ iree_lit_test_suite(
     "conv2d_batch_norm_expanded.mlir"
     "conv2d_batch_norm.mlir"
     "conv2d.mlir"
+    "e2e_conv2d.mlir"
   TOOLS
     FileCheck
     iree-compile

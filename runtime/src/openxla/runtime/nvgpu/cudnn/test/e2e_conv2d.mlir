@@ -1,5 +1,6 @@
-// RUN: iree-compile %s --mlir-print-ir-after-all --iree-plugin=openxla_nvgpu  \
+// RUN: iree-compile %s --iree-plugin=openxla_nvgpu \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
+// RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
 // RUN:     2> %t-ir-after-all                                                 \
 // RUN: | iree-run-module --module=- --device=cuda --function=test_conv        \
 // RUN: | FileCheck %s

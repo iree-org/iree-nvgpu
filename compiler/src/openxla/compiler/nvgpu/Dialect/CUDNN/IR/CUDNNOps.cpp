@@ -175,6 +175,11 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+void CallOp::setCalleeFromCallable(CallInterfaceCallable callee) {
+  auto symRef = callee.get<SymbolRefAttr>();
+  return setCalleeAttr(cast<FlatSymbolRefAttr>(symRef));
+}
+
 }  // namespace openxla::compiler::nvgpu::cudnn
 
 #define GET_OP_CLASSES

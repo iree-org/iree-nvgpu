@@ -382,6 +382,8 @@ def CUDNN_CallOp : CUDNN_Op<"call", [
     mlir::CallInterfaceCallable getCallableForCallee() {
       return getOperation()->getAttrOfType<mlir::FlatSymbolRefAttr>("callee");
     }
+    
+    void setCalleeFromCallable(::mlir::CallInterfaceCallable callee);
   }];
 }
 

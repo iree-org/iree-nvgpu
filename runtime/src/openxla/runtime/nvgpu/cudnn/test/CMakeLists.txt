@@ -12,7 +12,8 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
-    "conv2d_add_bias.mlir"
+    "conv2d_1x1_add_bias.mlir"
+    "conv2d_3x3_add_bias.mlir"
     "conv2d_batch_norm_add_max.mlir"
     "conv2d_batch_norm_expanded.mlir"
     "conv2d_batch_norm.mlir"

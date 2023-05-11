@@ -24,8 +24,14 @@ using namespace mlir;
 using namespace mlir::iree_compiler;
 
 static CudnnTensorType getCudnnTensorType(TensorType tensor_type) {
-  return CudnnTensorType::get(tensor_type.getShape(),
-                              tensor_type.getElementType());
+  // Reshuffle shape accoring to NHWC layout.
+  // TODO: Generalize this to other layouts.
+  ArrayRef<int64_t> shape = tensor_type.getShape();
+  assert(shape.size() == 4 && "expect 4 dims for NHWC layout");
+  SmallVector<int64_t> new_shape = {shape[0], shape[3], shape[1], shape[2]};
+
+  return CudnnTensorType::get(new_shape, tensor_type.getElementType(),
+                              Layout::NHWC);
 }
 
 static FailureOr<Layout> getCudnnTensorLayout(int64_t batch_dim,
@@ -46,7 +52,7 @@ static LogicalResult outlineToGraph(TypedValue<TensorType> result,
     return rewriter.notifyMatchFailure(result.getLoc(), "expected def by op");
   if (root->getNumResults() != 1)
     return rewriter.notifyMatchFailure(result.getLoc(), "expected one result");
-  func::FuncOp func = root->getParentOfType<func::FuncOp>();
+  auto func = root->getParentOfType<func::FuncOp>();
   if (!func) return rewriter.notifyMatchFailure(root, "expected child of func");
 
   // Collect the set of ops to clone into the region.
@@ -73,9 +79,9 @@ static LogicalResult outlineToGraph(TypedValue<TensorType> result,
       rewriter.getFunctionType(argTypes, getCudnnTensorType(result.getType()));
   OpBuilder::InsertionGuard guard(rewriter);
   rewriter.setInsertionPoint(func);
-  GraphOp graph = rewriter.create<GraphOp>(root->getLoc(), funcType,
-                                           /*arg_attrs=*/ArrayAttr{},
-                                           /*res_attrs=*/ArrayAttr{});
+  auto graph = rewriter.create<GraphOp>(root->getLoc(), funcType,
+                                        /*arg_attrs=*/ArrayAttr{},
+                                        /*res_attrs=*/ArrayAttr{});
   graph.setName(root->getName().getStringRef());
   SymbolTable symtab(func->getParentOp());
 
@@ -159,16 +165,17 @@ LogicalResult matchConv(stablehlo::ConvolutionOp op,
 
   // TODO(chsigg): support NHWC layout.
   if (getCudnnTensorLayout(dims.getInputBatchDimension(),
-                           dims.getInputFeatureDimension()) != Layout::NCHW)
+                           dims.getInputFeatureDimension()) != Layout::NHWC)
     return rewriter.notifyMatchFailure(op, "expected input to be NCHW");
   if (getCudnnTensorLayout(dims.getOutputBatchDimension(),
-                           dims.getOutputFeatureDimension()) != Layout::NCHW)
+                           dims.getOutputFeatureDimension()) != Layout::NHWC)
     return rewriter.notifyMatchFailure(op, "expected output to be NCHW");
   // TODO(chsigg): support HWIO.
   if (getCudnnTensorLayout(dims.getKernelOutputFeatureDimension(),
                            dims.getKernelInputFeatureDimension()) !=
-      Layout::NCHW)
+      Layout::NHWC) {
     return rewriter.notifyMatchFailure(op, "expected kernel to be OIHW");
+  }
 
   return success();
 }

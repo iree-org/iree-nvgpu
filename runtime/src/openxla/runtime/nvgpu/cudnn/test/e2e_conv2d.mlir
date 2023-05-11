@@ -1,6 +1,6 @@
 // RUN: iree-compile %s --mlir-print-ir-after-all --iree-plugin=openxla_nvgpu  \
-// RUN:     --iree-input-type=stablehlo_experimental                           \
-// RUN:     --iree-hal-target-backends=cuda 2> %t-ir-after-all                 \
+// RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
+// RUN:     2> %t-ir-after-all                                                 \
 // RUN: | iree-run-module --module=- --device=cuda --function=test_conv        \
 // RUN: | FileCheck %s
 

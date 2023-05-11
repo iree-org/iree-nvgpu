@@ -46,5 +46,5 @@ Some of the tests can run only on an Ampere+ devices because they rely on the
 
 ```
 cmake --build build
-ctest --test-dir build -R openxla/runtime/nvgpu/test/
+ctest --test-dir build -R openxla/runtime/nvgpu/cudnn/test/
 ```

@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_MODULE_H_
-#define OPENXLA_RUNTIME_NVGPU_CUDNN_MODULE_H_
+#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_MODULE_H_
+#define OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_MODULE_H_
 
 #include "iree/base/api.h"
 #include "iree/vm/api.h"
@@ -17,4 +17,4 @@ extern "C" iree_status_t openxla_nvgpu_cudnn_module_create(
 extern "C" iree_status_t openxla_nvgpu_cudnn_module_register_types(
     iree_vm_instance_t* instance);
 
-#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_MODULE_H_
+#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_CUDNN_MODULE_H_

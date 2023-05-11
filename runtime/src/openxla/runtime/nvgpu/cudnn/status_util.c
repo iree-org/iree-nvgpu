@@ -4,11 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/runtime/nvgpu/status_util.h"
+#include "openxla/runtime/nvgpu/cudnn/status_util.h"
 
 #include <stddef.h>
 
-#include "openxla/runtime/nvgpu/dynamic_symbols.h"
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbols.h"
 
 iree_status_t openxla_cudnn_status_to_status(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnStatus_t status,

@@ -4,12 +4,12 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef OPENXLA_RUNTIME_NVGPU_DYNAMIC_SYMBOLS_H_
-#define OPENXLA_RUNTIME_NVGPU_DYNAMIC_SYMBOLS_H_
+#ifndef OPENXLA_RUNTIME_NVGPU_CUDNN_DYNAMIC_SYMBOLS_H_
+#define OPENXLA_RUNTIME_NVGPU_CUDNN_DYNAMIC_SYMBOLS_H_
 
 #include "iree/base/api.h"
 #include "iree/base/internal/dynamic_library.h"
-#include "openxla/runtime/nvgpu/cudnn_headers.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_headers.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -30,7 +30,7 @@ typedef struct openxla_cudnn_dynamic_symbols_t {
 #define CUDNN_PFN_DECL_SIZE_RETURN(cuDNNSymbolName, ...) \
   size_t (*cuDNNSymbolName)(__VA_ARGS__);
 
-#include "openxla/runtime/nvgpu/dynamic_symbol_tables.h"  // IWYU pragma: export
+#include "openxla/runtime/nvgpu/cudnn/dynamic_symbol_tables.h"  // IWYU pragma: export
 
 #undef CUDNN_PFN_DECL
 #undef CUDNN_PFN_DECL_STR_RETURN
@@ -53,4 +53,4 @@ void openxla_cudnn_dynamic_symbols_deinitialize(
 }  // extern "C"
 #endif  // __cplusplus
 
-#endif  // OPENXLA_RUNTIME_NVGPU_DYNAMIC_SYMBOLS_H_
+#endif  // OPENXLA_RUNTIME_NVGPU_CUDNN_DYNAMIC_SYMBOLS_H_

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/runtime/nvgpu/cudnn_api.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_api.h"
 
 #include <algorithm>
 #include <iostream>
@@ -23,8 +23,8 @@
 #include "iree/hal/drivers/cuda/status_util.h"
 #include "iree/modules/hal/types.h"
 #include "iree/vm/ref_cc.h"
-#include "openxla/runtime/nvgpu/cudnn_stub.h"
-#include "openxla/runtime/nvgpu/status_util.h"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_stub.h"
+#include "openxla/runtime/nvgpu/cudnn/status_util.h"
 
 namespace openxla::runtime::nvgpu {
 
@@ -33,7 +33,7 @@ using namespace iree;
 using cudnn_frontend::TensorBuilder;
 
 // clang-format off
-#include "openxla/runtime/nvgpu/cudnn_stub.h.inc"
+#include "openxla/runtime/nvgpu/cudnn/cudnn_stub.h.inc"
 // clang-format on
 
 static std::vector<CudnnTensor*> AsPtrs(span<const vm::ref<CudnnTensor>> refs) {

@@ -10,7 +10,7 @@
 
 CUDNN_PFN_DECL(cudnnCreate, cudnnHandle_t *)
 CUDNN_PFN_DECL(cudnnDestroy, cudnnHandle_t)
-CUDNN_PFN_DECL_STR_RETURN(cudnnGetErrorString)
+CUDNN_PFN_DECL_STR_RETURN(cudnnGetErrorString, cudnnStatus_t)
 
 //===----------------------------------------------------------------------===//
 // Functions required for compiling cudnn_frontend (see cudnn_tensor.{h,cpp}).

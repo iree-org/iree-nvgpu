@@ -1,9 +1,12 @@
-// RUN: iree-opt %s --iree-plugin=openxla_nvgpu                                \
-// RUN:     --openxla-nvgpu-convert-hlo-to-cudnn                               \
-// RUN: | iree-compile - --iree-plugin=openxla_nvgpu --iree-input-type=mhlo    \
-// RUN:     --iree-hal-target-backends=cuda                                    \
+// RUN: iree-compile %s --iree-plugin=openxla_nvgpu \
+// RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
+// RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
+// RUN:     2> %t-ir-after-all                                                 \
 // RUN: | iree-run-module --module=- --device=cuda --function=test_conv        \
 // RUN: | FileCheck %s
+
+// RUN: cat %t-ir-after-all                                                    \
+// RUN: | FileCheck %s --check-prefix=CHECK-IR
 
 
 util.global @x : tensor<100x26x26x32xf32> = dense<1.0> : tensor<100x26x26x32xf32>
@@ -37,3 +40,19 @@ func.func @test_conv() -> tensor<100x26x26x32xf32> {
       -> tensor<100x26x26x32xf32>
   func.return %result : tensor<100x26x26x32xf32>
 }
+
+
+// Ensure that we actually lower to Cudnn.
+// CHECK-IR: IR Dump After ConvertCudnnToRuntime (openxla-nvgpu-convert-cudnn-to-runtime)
+
+// CHECK-IR: func.func @stablehlo.convolution.builder
+// CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
+// CHECK-IR:   call @cudnn.tensor.create.4d.khwc
+// CHECK-IR:   call @cudnn.convolution.2d
+// CHECK-IR:   call @cudnn.operation_graph.create
+
+// CHECK-IR: func.func private @_test_conv
+// CHECK-IR:   call @cudnn.handle
+// CHECK-IR:   call @stablehlo.convolution.builder
+// CHECK-IR:   call @cudnn.executable.create
+// CHECK-IR:   call @cudnn.execute.2

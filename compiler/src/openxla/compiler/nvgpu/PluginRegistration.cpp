@@ -54,6 +54,13 @@ struct NvgpuSession : public PluginSession<NvgpuSession, NvgpuOptions> {
     registry.insert<cudnn::CUDNNDialect>();
   }
 
+  void extendInputConversionPreprocessingPassPipeline(
+      OpPassManager &pm, InputDialectOptions::Type inputType) override {
+    if (inputType == InputDialectOptions::Type::stablehlo) {
+      pm.addPass(cudnn::createConvertHLOToCUDNNPass());
+    }
+  }
+
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
     pm.addPass(cudnn::createExpandCudnnOperationsPass());
     pm.addPass(cudnn::createConvertCudnnToRuntimePass());

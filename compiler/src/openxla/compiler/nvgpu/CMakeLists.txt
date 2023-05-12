@@ -28,6 +28,7 @@ iree_cc_library(
     ::defs
     MLIRIR
     MLIRPass
+    iree::compiler::Pipelines::Options
     iree::compiler::PluginAPI
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
     openxla::compiler::nvgpu::Dialect::CUDNN::Transforms

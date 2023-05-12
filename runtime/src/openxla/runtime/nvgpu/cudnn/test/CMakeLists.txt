@@ -19,6 +19,7 @@ iree_lit_test_suite(
     "conv2d_batch_norm.mlir"
     "conv2d.mlir"
     "e2e_conv2d.mlir"
+    "e2e_resnet50_fake_weights.mlir"
   TOOLS
     FileCheck
     iree-compile

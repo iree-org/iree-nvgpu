@@ -1,0 +1,58 @@
+# Copyright 2023 The OpenXLA Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+load("//build_tools/bazel:build_defs.oss.bzl", "iree_gentbl_cc_library", "iree_tablegen_doc", "iree_td_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_gentbl_cc_library(
+    name = "PassesIncGen",
+    tbl_outs = [
+        (
+            ["--gen-pass-decls"],
+            "Passes.h.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "Passes.td",
+    deps = ["@llvm-project//mlir:PassBaseTdFiles"],
+)
+
+# TODO(ezhulenev): Use `iree_compiler_cc_library` once build converter tool will
+# support it.
+cc_library(
+    name = "PassHeaders",
+    hdrs = [
+        "PassDetail.h",
+        "Passes.h",
+        "Passes.h.inc",
+    ],
+    deps = [
+        ":PassesIncGen",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Transforms",
+    ],
+)
+
+# TODO(ezhulenev): Use `iree_compiler_cc_library` once build converter tool will
+# support it.
+cc_library(
+    name = "Transforms",
+    srcs = [
+        "ConvertTritonToCustomDispatch.cpp",
+        "Passes.cpp",
+    ],
+    hdrs = ["Passes.h"],
+    deps = [
+        ":PassHeaders",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/Triton/Conversion/TritonToCustomDispatch",
+        "@llvm-project//mlir:Pass",
+    ],
+)

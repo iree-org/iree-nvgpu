@@ -81,7 +81,7 @@ iree_setup_toolchain()
 #-------------------------------------------------------------------------------
 # OpenXLA NVGPU Runtime.
 #
-# Integration of NVIDIA libraries with IREE runtime via custom VM modules.
+# Integration of libraries with IREE runtime via custom VM modules.
 #-------------------------------------------------------------------------------
 
 add_subdirectory(runtime)
@@ -91,3 +91,9 @@ add_subdirectory(runtime)
 #-------------------------------------------------------------------------------
 
 add_subdirectory(build_tools/third_party/cudnn-frontend EXCLUDE_FROM_ALL)
+
+#-------------------------------------------------------------------------------
+# Triton dependencies
+#-------------------------------------------------------------------------------
+
+add_subdirectory(build_tools/third_party/triton EXCLUDE_FROM_ALL)

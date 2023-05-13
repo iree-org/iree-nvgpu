@@ -1,5 +1,8 @@
 build/
 
+# IREE Python virtual environment
+iree.venv/
+
 # Source indexing files
 compile_commands.json
 .cache/clangd

@@ -57,7 +57,7 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
   }
 
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
-    pm.addPass(createConvertTritonToCustomDispatchPass());
+    pm.addPass(createConvertTritonToFlowDispatchPass());
   }
 };
 
@@ -95,7 +95,7 @@ struct CudnnSession : public PluginSession<CudnnSession, CudnnOptions> {
   void extendInputConversionPreprocessingPassPipeline(
       OpPassManager &pm, InputDialectOptions::Type inputType) override {
     if (inputType == InputDialectOptions::Type::stablehlo) {
-      pm.addPass(cudnn::createConvertHLOToCUDNNPass());
+      pm.addPass(createConvertHLOToCUDNNPass());
     }
   }
 

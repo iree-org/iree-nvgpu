@@ -39,12 +39,12 @@ iree_cc_library(
   HDRS
     "Passes.h"
   SRCS
-    "ConvertTritonToCustomDispatch.cpp"
+    "ConvertTritonToFlowDispatch.cpp"
     "Passes.cpp"
   DEPS
     ::PassHeaders
     MLIRPass
-    openxla::compiler::nvgpu::Dialect::Triton::Conversion::TritonToCustomDispatch
+    openxla::compiler::nvgpu::Dialect::Triton::Conversion::TritonToFlowDispatch
   PUBLIC
 )
 

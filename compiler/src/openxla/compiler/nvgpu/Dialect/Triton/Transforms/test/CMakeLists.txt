@@ -14,7 +14,7 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
-    "triton_to_custom_dispatch.mlir"
+    "triton_to_flow_dispatch.mlir"
   TOOLS
     FileCheck
     iree-opt

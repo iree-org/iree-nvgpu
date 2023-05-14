@@ -12,11 +12,11 @@ iree_add_all_subdirs()
 
 iree_cc_library(
   NAME
-    TritonToCustomDispatch
+    TritonToFlowDispatch
   HDRS
-    "ConvertTritonToCustomDispatch.h"
+    "ConvertTritonToFlowDispatch.h"
   SRCS
-    "ConvertTritonToCustomDispatch.cpp"
+    "ConvertTritonToFlowDispatch.cpp"
   DEPS
     LLVMSupport
     MLIRIR

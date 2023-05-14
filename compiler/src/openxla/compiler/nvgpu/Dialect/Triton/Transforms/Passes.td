@@ -9,12 +9,12 @@ include "mlir/Pass/PassBase.td"
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_TRITON_TRANSFORMS_PASSES_TD_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_TRITON_TRANSFORMS_PASSES_TD_
 
-def ConvertTritonToCustomDispatch :
-    Pass<"openxla-nvgpu-convert-triton-to-custom-dispatch", "mlir::ModuleOp"> {
-  let summary = "Converts Triton dispatches to IREE custom dispatch";
+def ConvertTritonToFlowDispatch :
+    Pass<"openxla-nvgpu-convert-triton-to-flow-dispatch", "mlir::ModuleOp"> {
+  let summary = "Converts Triton dispatches to IREE Flow dispatch";
 
   let constructor = [{
-    openxla::compiler::nvgpu::triton::createConvertTritonToCustomDispatchPass()
+    openxla::compiler::nvgpu::triton::createConvertTritonToFlowDispatchPass()
   }];
 
   let dependentDialects = [

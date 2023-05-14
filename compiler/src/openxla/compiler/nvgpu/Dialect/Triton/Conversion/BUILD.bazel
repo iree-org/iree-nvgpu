@@ -15,9 +15,9 @@ package(
 # TODO(ezhulenev): Use `iree_compiler_cc_library` once build converter tool will
 # support it.
 cc_library(
-    name = "TritonToCustomDispatch",
-    srcs = ["ConvertTritonToCustomDispatch.cpp"],
-    hdrs = ["ConvertTritonToCustomDispatch.h"],
+    name = "TritonToFlowDispatch",
+    srcs = ["ConvertTritonToFlowDispatch.cpp"],
+    hdrs = ["ConvertTritonToFlowDispatch.h"],
     deps = [
         # TODO(ezhulenev): Add bazel build for Triton.
         "//compiler/src/openxla/compiler/nvgpu/Dialect/Triton/IR",

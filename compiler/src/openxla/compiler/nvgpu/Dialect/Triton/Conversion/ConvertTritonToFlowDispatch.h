@@ -38,8 +38,8 @@ struct TritonOptions {
 // given pattern list. OpenXLA Triton dialect contains operations glueing
 // together Triton compiler and IREE runtime. Triton compiler uses its own
 // triton dialects (ttir and ttgir).
-void populateTritonToCustomDispatchPatterns(mlir::TypeConverter &typeConverter,
-                                            mlir::RewritePatternSet &patterns);
+void populateTritonToFlowDispatchPatterns(mlir::TypeConverter &typeConverter,
+                                          mlir::RewritePatternSet &patterns);
 
 // Build a compilation pipeline that lowers from Triton IR to LLVM. This is an
 // implentation details of the Triton to OpenXLA Triton runtime lowering and

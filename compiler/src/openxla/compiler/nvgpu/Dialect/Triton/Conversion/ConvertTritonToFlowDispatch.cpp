@@ -4,12 +4,6 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToCustomDispatch.h"
-
-#include <iree/compiler/Dialect/Util/IR/UtilOps.h>
-#include <iree/compiler/Dialect/Util/IR/UtilTypes.h>
-#include <triton/Dialect/Triton/IR/Dialect.h>
-
 #include <cstdint>
 #include <cstdio>
 #include <functional>
@@ -19,6 +13,8 @@
 
 #include "compiler/src/iree/compiler/Dialect/Flow/IR/FlowOps.h"
 #include "compiler/src/iree/compiler/Dialect/HAL/IR/HALOps.h"
+#include "iree/compiler/Dialect/Util/IR/UtilOps.h"
+#include "iree/compiler/Dialect/Util/IR/UtilTypes.h"
 #include "iree/compiler/Utils/OptionUtils.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/Module.h"
@@ -45,9 +41,11 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToFlowDispatch.h"
 #include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.h"
 #include "triton/Conversion/TritonGPUToLLVM/TritonGPUToLLVMPass.h"
 #include "triton/Conversion/TritonToTritonGPU/TritonToTritonGPUPass.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/Triton/Transforms/Passes.h"
 #include "triton/Dialect/TritonGPU/Transforms/Passes.h"
 #include "triton/Target/LLVMIR/LLVMIRTranslation.h"
@@ -344,8 +342,8 @@ struct ConvertTritonDispatchOp
 
 }  // namespace
 
-void populateTritonToCustomDispatchPatterns(TypeConverter &typeConverter,
-                                            RewritePatternSet &patterns) {
+void populateTritonToFlowDispatchPatterns(TypeConverter &typeConverter,
+                                          RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
   patterns.insert<ConvertTritonDispatchOp>(typeConverter, ctx);
 }

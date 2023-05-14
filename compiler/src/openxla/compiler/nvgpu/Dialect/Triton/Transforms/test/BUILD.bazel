@@ -16,7 +16,7 @@ iree_lit_test_suite(
     name = "lit",
     srcs = enforce_glob(
         [
-            "triton_to_hal.mlir",
+            "triton_to_flow_dispatch.mlir",
         ],
         include = ["*.mlir"],
     ),

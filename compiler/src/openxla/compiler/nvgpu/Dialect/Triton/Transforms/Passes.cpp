@@ -6,7 +6,7 @@
 
 #include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h"
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToCustomDispatch.h"
+#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToFlowDispatch.h"
 
 namespace detail {
 namespace {

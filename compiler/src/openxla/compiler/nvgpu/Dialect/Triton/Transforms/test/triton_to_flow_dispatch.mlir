@@ -1,15 +1,5 @@
-// RUN: iree-compile %s \
-// RUN:     --iree-hal-executable-object-search-path=$IREE_BINARY_DIR | \
-// RUN: iree-run-module \
-// RUN:     --device=cuda \
-// RUN:     --module=- \
-// RUN:     --function=mixed_invocation \
-// RUN:     --input=8xf32=2 \
-// RUN:     --input=8xf32=4 | \
-// RUN: FileCheck %s
-
 // RUN: iree-opt %s --iree-plugin=openxla-triton                               \
-// RUN:             --openxla-nvgpu-triton-to-llvm-compilation-pipeline        \
+// RUN:             --openxla-nvgpu-convert-triton-to-flow-dispatch            \
 // RUN:   | FileCheck %s
 
 tt.func @add_kernel(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) {
@@ -46,3 +36,26 @@ func.func @main(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf3
 
   return %0 : tensor<128xf32>
 }
+
+// CHECK: #pipeline_layout = #hal.pipeline.layout<push_constants = 1,
+// CHECK:   sets = [<0, bindings = [
+// CHECK:                 <0, storage_buffer, ReadOnly>,
+// CHECK:                 <1, storage_buffer, ReadOnly>,
+// CHECK:                 <2, storage_buffer>
+// CHECK:               ]>
+// CHECK:          ]>
+
+// CHECK: hal.executable.source private @add_kernel.executable
+// CHECK:   objects = #hal.executable.objects<{
+// CHECK:     #executable_target_cuda_nvptx_fb = [
+// CHECK:       #hal.executable.object<{path = "{{.*}}.ptx"}>
+// CHECK:     ]
+// CHECK:   }>
+
+// CHECK: hal.executable.export public @add_kernel ordinal(0)
+// CHECK:   layout(#pipeline_layout)
+// CHECK:   workgroup_size = [64 : index, 1 : index, 1 : index]
+
+// CHECK: func @main
+// CHECK:   %[[GRID:.*]] = affine.apply
+// CHECK:   flow.dispatch @add_kernel.executable::@add_kernel[%[[GRID]]]

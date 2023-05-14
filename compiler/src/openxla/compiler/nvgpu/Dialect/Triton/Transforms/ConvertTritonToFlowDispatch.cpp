@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToCustomDispatch.h"
+#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToFlowDispatch.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
@@ -12,7 +12,7 @@
 #include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/PassDetail.h"
 #include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h"
 
-#define GEN_PASS_DEF_CONVERTTRITONTOCUSTOMDISPATCH
+#define GEN_PASS_DEF_CONVERTTRITONTOFLOWDISPATCH
 #include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h.inc"
 
 namespace IREE = mlir::iree_compiler::IREE;
@@ -21,9 +21,9 @@ using namespace mlir;
 
 namespace openxla::compiler::nvgpu::triton {
 
-class ConvertTritonToCustomDispatch
-    : public ::impl::ConvertTritonToCustomDispatchBase<
-          ConvertTritonToCustomDispatch> {
+class ConvertTritonToFlowDispatch
+    : public ::impl::ConvertTritonToFlowDispatchBase<
+          ConvertTritonToFlowDispatch> {
  public:
   void runOnOperation() override {
     auto *context = &getContext();
@@ -38,7 +38,7 @@ class ConvertTritonToCustomDispatch
     conversionTarget.addLegalDialect<IREE::Flow::FlowDialect>();
 
     RewritePatternSet patterns(&getContext());
-    populateTritonToCustomDispatchPatterns(typeConverter, patterns);
+    populateTritonToFlowDispatchPatterns(typeConverter, patterns);
 
     if (failed(applyPartialConversion(getOperation(), conversionTarget,
                                       std::move(patterns)))) {
@@ -50,8 +50,8 @@ class ConvertTritonToCustomDispatch
 };
 
 std::unique_ptr<OperationPass<ModuleOp>>
-createConvertTritonToCustomDispatchPass() {
-  return std::make_unique<ConvertTritonToCustomDispatch>();
+createConvertTritonToFlowDispatchPass() {
+  return std::make_unique<ConvertTritonToFlowDispatch>();
 }
 
 }  // namespace openxla::compiler::nvgpu::triton

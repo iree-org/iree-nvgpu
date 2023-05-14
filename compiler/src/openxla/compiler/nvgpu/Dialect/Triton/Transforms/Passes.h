@@ -18,7 +18,7 @@ namespace openxla::compiler::nvgpu::triton {
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
-createConvertTritonToCustomDispatchPass();
+createConvertTritonToFlowDispatchPass();
 
 //===----------------------------------------------------------------------===//
 // OpenXLA Triton passes registration

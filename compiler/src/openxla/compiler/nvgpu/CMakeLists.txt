@@ -32,8 +32,8 @@ iree_cc_library(
     iree::compiler::PluginAPI
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
     openxla::compiler::nvgpu::Dialect::CUDNN::Transforms
-    openxla::compiler::nvgpu::Dialect::Triton::IR
-    openxla::compiler::nvgpu::Dialect::Triton::Transforms
+    openxla::compiler::nvgpu::Dialect::TritonFlow::IR
+    openxla::compiler::nvgpu::Dialect::TritonFlow::Transforms
     openxla::compiler::nvgpu::Transforms
     triton::TritonIR
   PUBLIC

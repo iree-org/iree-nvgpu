@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/ConvertTritonToFlowDispatch.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <functional>
@@ -41,8 +43,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
-#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToFlowDispatch.h"
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 #include "triton/Conversion/TritonGPUToLLVM/TritonGPUToLLVMPass.h"
 #include "triton/Conversion/TritonToTritonGPU/TritonToTritonGPUPass.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"

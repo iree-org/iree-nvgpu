@@ -4,22 +4,22 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
 using namespace mlir;
 using namespace openxla::compiler::nvgpu::triton;
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.cpp.inc"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.cpp.inc"
 
 //===----------------------------------------------------------------------===//
-// Triton dialect.
+// TritonFlow dialect.
 //===----------------------------------------------------------------------===//
 
-void TritonDialect::initialize() {
+void TritonFlowDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.cpp.inc"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.cpp.inc"
       >();
 }

@@ -4,7 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
@@ -15,7 +15,7 @@
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Support/LogicalResult.h"
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 
 namespace openxla::compiler::nvgpu::triton {
 
@@ -34,4 +34,4 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 }  // namespace openxla::compiler::nvgpu::triton
 
 #define GET_OP_CLASSES
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonOps.cpp.inc"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.cpp.inc"

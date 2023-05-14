@@ -9,8 +9,8 @@
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
-#include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.h"
-#include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
@@ -51,7 +51,7 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
   }
 
   void onRegisterDialects(DialectRegistry &registry) override {
-    registry.insert<TritonDialect>();
+    registry.insert<TritonFlowDialect>();
     registry.insert<triton::TritonDialect>();
     registry.insert<NVVM::NVVMDialect>();
   }

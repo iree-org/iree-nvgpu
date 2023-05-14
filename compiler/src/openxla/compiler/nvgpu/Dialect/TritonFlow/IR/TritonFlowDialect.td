@@ -9,7 +9,7 @@
 
 include "mlir/IR/OpBase.td"
 
-def Triton_Dialect : Dialect {
+def TritonFlow_Dialect : Dialect {
   let name = "triton";
   let cppNamespace = "::openxla::compiler::nvgpu::triton";
   let description = [{
@@ -18,27 +18,28 @@ def Triton_Dialect : Dialect {
   }];
 }
 
-def Triton_Dim : TypeAlias<Index>;
+def TritonFlow_Dim : TypeAlias<Index>;
 
 //===----------------------------------------------------------------------===//
 // General types and helpers
 //===----------------------------------------------------------------------===//
 
-class Triton_SymbolRefAttr : Attr<CPred<"$_self.isa<mlir::FlatSymbolRefAttr>()">,
-                                       "symbol reference attribute"> {
+class TritonFlow_SymbolRefAttr :
+        Attr<CPred<"$_self.isa<mlir::FlatSymbolRefAttr>()">,
+             "symbol reference attribute"> {
   let storageType = [{ mlir::FlatSymbolRefAttr }];
   let returnType = [{ mlir::StringRef }];
   let valueType = NoneType;
   let constBuilderCall = "mlir::SymbolRefAttr::get($_builder.getContext(), $0)";
 }
 
-def Triton_FuncRefAttr : Triton_SymbolRefAttr;
+def TritonFlow_FuncRefAttr : TritonFlow_SymbolRefAttr;
 
 //===----------------------------------------------------------------------===//
 // Base operation definition
 //===----------------------------------------------------------------------===//
 
-class Triton_Op<string mnemonic, list<Trait> traits = []> :
-        Op<Triton_Dialect, mnemonic, traits>;
+class TritonFlow_Op<string mnemonic, list<Trait> traits = []> :
+        Op<TritonFlow_Dialect, mnemonic, traits>;
 
 #endif // TRITON_DIALECT

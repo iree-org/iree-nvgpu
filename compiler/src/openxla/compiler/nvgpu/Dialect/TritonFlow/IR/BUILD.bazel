@@ -14,8 +14,8 @@ iree_td_library(
     name = "td_files",
     srcs = enforce_glob(
         [
-            "TritonDialect.td",
-            "TritonOps.td",
+            "TritonFlowDialect.td",
+            "TritonFlowOps.td",
         ],
         include = ["*.td"],
     ),
@@ -27,21 +27,21 @@ iree_td_library(
 cc_library(
     name = "IR",
     srcs = [
-        "TritonDialect.cpp",
-        "TritonOps.cpp",
+        "TritonFlowDialect.cpp",
+        "TritonFlowOps.cpp",
     ],
     hdrs = [
-        "TritonDialect.h",
-        "TritonOps.h",
+        "TritonFlowDialect.h",
+        "TritonFlowOps.h",
     ],
     textual_hdrs = [
-        "TritonDialect.h.inc",
-        "TritonDialect.cpp.inc",
-        "TritonOps.h.inc",
-        "TritonOps.cpp.inc",
+        "TritonFlowDialect.h.inc",
+        "TritonFlowDialect.cpp.inc",
+        "TritonFlowOps.h.inc",
+        "TritonFlowOps.cpp.inc",
     ],
     deps = [
-        ":TritonOpsGen",
+        ":TritonFlowOpsGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
@@ -50,32 +50,32 @@ cc_library(
 )
 
 iree_gentbl_cc_library(
-    name = "TritonOpsGen",
+    name = "TritonFlowOpsGen",
     tbl_outs = [
         (
             [
                 "--gen-dialect-decls",
                 "--dialect=triton",
             ],
-            "TritonDialect.h.inc",
+            "TritonFlowDialect.h.inc",
         ),
         (
             [
                 "--gen-dialect-defs",
                 "--dialect=triton",
             ],
-            "TritonDialect.cpp.inc",
+            "TritonFlowDialect.cpp.inc",
         ),
         (
             ["--gen-op-decls"],
-            "TritonOps.h.inc",
+            "TritonFlowOps.h.inc",
         ),
         (
             ["--gen-op-defs"],
-            "TritonOps.cpp.inc",
+            "TritonFlowOps.cpp.inc",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "TritonOps.td",
+    td_file = "TritonFlowOps.td",
     deps = [":td_files"],
 )

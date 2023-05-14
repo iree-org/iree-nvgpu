@@ -52,7 +52,7 @@ cc_library(
     hdrs = ["Passes.h"],
     deps = [
         ":PassHeaders",
-        "//compiler/src/openxla/compiler/nvgpu/Dialect/Triton/Conversion/TritonToFlowDispatch",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/TritonToFlowDispatch",
         "@llvm-project//mlir:Pass",
     ],
 )

@@ -4,14 +4,14 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
 
-#include "openxla/compiler/nvgpu/Dialect/Triton/Conversion/ConvertTritonToFlowDispatch.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/ConvertTritonToFlowDispatch.h"
 
 namespace detail {
 namespace {
 #define GEN_PASS_REGISTRATION
-#include "openxla/compiler/nvgpu/Dialect/Triton/Transforms/Passes.h.inc"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"
 }  // namespace
 }  // namespace detail
 

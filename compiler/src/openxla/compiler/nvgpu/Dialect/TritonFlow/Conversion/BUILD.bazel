@@ -20,7 +20,7 @@ cc_library(
     hdrs = ["ConvertTritonToFlowDispatch.h"],
     deps = [
         # TODO(ezhulenev): Add bazel build for Triton.
-        "//compiler/src/openxla/compiler/nvgpu/Dialect/Triton/IR",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/IR",
         "@iree_core//compiler/src/iree/compiler/Dialect/Flow/IR",
         "@iree_core//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@iree_core//compiler/src/iree/compiler/Utils",

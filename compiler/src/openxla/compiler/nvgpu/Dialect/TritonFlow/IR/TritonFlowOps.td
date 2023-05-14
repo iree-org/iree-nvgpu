@@ -10,7 +10,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
-include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.td"
+include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.td"
 
 //===----------------------------------------------------------------------===//
 // triton.dispatch operation
@@ -20,7 +20,7 @@ include "openxla/compiler/nvgpu/Dialect/Triton/IR/TritonDialect.td"
 // executable to carry Triton compilation options. For now we just dispatch
 // a Triton function and hardcode all other parameters.
 
-def Triton_DispatchOp : Triton_Op<"dispatch", [
+def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
     AttrSizedOperandSegments,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
@@ -31,8 +31,8 @@ def Triton_DispatchOp : Triton_Op<"dispatch", [
   }];
 
   let arguments = (ins
-    Variadic<Triton_Dim>:$grid,
-    Triton_FuncRefAttr:$callee,
+    Variadic<TritonFlow_Dim>:$grid,
+    TritonFlow_FuncRefAttr:$callee,
     Variadic<AnyType>:$arguments
   );
 

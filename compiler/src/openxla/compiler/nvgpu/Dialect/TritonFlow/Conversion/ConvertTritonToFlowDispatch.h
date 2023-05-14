@@ -12,7 +12,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 struct TritonOptions {
   // TODO(ezhulenev): This is a very old compute capability version that happens
@@ -47,6 +47,6 @@ void populateTritonToFlowDispatchPatterns(mlir::TypeConverter &typeConverter,
 void buildTritonCompilationPipeline(mlir::OpPassManager &pm,
                                     const TritonOptions &opts);
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_CONVERSION_CONVERT_TRITON_TO_FLOW_DISPATCH_H_

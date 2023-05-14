@@ -14,11 +14,11 @@ def ConvertTritonToFlowDispatch :
   let summary = "Converts Triton dispatches to IREE Flow dispatch";
 
   let constructor = [{
-    openxla::compiler::nvgpu::triton::createConvertTritonToFlowDispatchPass()
+    openxla::compiler::nvgpu::tritonflow::createConvertTritonToFlowDispatchPass()
   }];
 
   let dependentDialects = [
-    "openxla::compiler::nvgpu::triton::TritonFlowDialect",
+    "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
     "mlir::iree_compiler::IREE::Flow::FlowDialect",
     "mlir::iree_compiler::IREE::HAL::HALDialect",
     "mlir::LLVM::LLVMDialect",

@@ -15,7 +15,7 @@ namespace {
 }  // namespace
 }  // namespace detail
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 using namespace mlir;
 
 void registerOpenXlaTritonPases() { ::detail::registerPasses(); }
@@ -30,4 +30,4 @@ void registerOpenXlaTritonPipelines() {
       });
 }
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow

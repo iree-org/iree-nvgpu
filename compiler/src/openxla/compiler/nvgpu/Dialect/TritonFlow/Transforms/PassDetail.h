@@ -19,11 +19,11 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 #define GEN_PASS_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSDETAIL_H_

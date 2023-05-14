@@ -20,7 +20,7 @@ namespace IREE = mlir::iree_compiler::IREE;
 using namespace mlir;
 using namespace mlir::triton;
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 class ConvertTritonToFlowDispatch
     : public ::impl::ConvertTritonToFlowDispatchBase<
@@ -55,4 +55,4 @@ createConvertTritonToFlowDispatchPass() {
   return std::make_unique<ConvertTritonToFlowDispatch>();
 }
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow

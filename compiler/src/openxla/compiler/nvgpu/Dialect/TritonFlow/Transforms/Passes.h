@@ -11,7 +11,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 //===----------------------------------------------------------------------===//
 // Conversion from Triton dialect
@@ -28,6 +28,6 @@ void registerOpenXlaTritonPases();
 
 void registerOpenXlaTritonPipelines();
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow
 
 #endif  // OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSES_H_

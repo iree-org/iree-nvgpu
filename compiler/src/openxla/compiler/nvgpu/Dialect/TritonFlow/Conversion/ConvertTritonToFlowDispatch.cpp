@@ -53,9 +53,9 @@
 #include "triton/Target/PTX/PTXTranslation.h"
 
 IREE_DEFINE_COMPILER_OPTION_FLAGS(
-    openxla::compiler::nvgpu::triton::TritonOptions);
+    openxla::compiler::nvgpu::tritonflow::TritonOptions);
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 using namespace mlir;
 using namespace mlir::triton;
@@ -188,12 +188,11 @@ static FailureOr<std::string> compileTritonFunctionToPTX(
 
 using llvm::sys::fs::TempFile;
 
-struct ConvertTritonDispatchOp
-    : public OpConversionPattern<triton::DispatchOp> {
+struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      triton::DispatchOp op, OpAdaptor adaptor,
+      DispatchOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     MLIRContext *ctx = getContext();
 
@@ -346,7 +345,7 @@ struct ConvertTritonDispatchOp
 void populateTritonToFlowDispatchPatterns(TypeConverter &typeConverter,
                                           RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
-  patterns.insert<ConvertTritonDispatchOp>(typeConverter, ctx);
+  patterns.insert<ConvertTritonFlowDispatchOp>(typeConverter, ctx);
 }
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow

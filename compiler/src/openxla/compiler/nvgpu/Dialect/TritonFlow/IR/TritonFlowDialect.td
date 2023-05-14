@@ -11,7 +11,7 @@ include "mlir/IR/OpBase.td"
 
 def TritonFlow_Dialect : Dialect {
   let name = "triton";
-  let cppNamespace = "::openxla::compiler::nvgpu::triton";
+  let cppNamespace = "::openxla::compiler::nvgpu::tritonflow";
   let description = [{
     OpenXLA Triton dialect contains operations glueing together Triton compiler
     and IREE runtime and allows embedding Triton programs into OpenXLA modules.

@@ -38,7 +38,7 @@ namespace {
 //===----------------------------------------------------------------------===//
 
 namespace {
-using namespace ::openxla::compiler::nvgpu::triton;
+using namespace ::openxla::compiler::nvgpu::tritonflow;
 
 struct TritonOptions {
   void bindOptions(OptionsBinder &binder) {}

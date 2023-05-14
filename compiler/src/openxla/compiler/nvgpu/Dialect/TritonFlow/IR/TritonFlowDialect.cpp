@@ -9,7 +9,7 @@
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
 using namespace mlir;
-using namespace openxla::compiler::nvgpu::triton;
+using namespace openxla::compiler::nvgpu::tritonflow;
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.cpp.inc"
 

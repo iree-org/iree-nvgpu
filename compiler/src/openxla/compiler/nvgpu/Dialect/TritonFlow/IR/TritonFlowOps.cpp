@@ -17,7 +17,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 
-namespace openxla::compiler::nvgpu::triton {
+namespace openxla::compiler::nvgpu::tritonflow {
 
 using namespace mlir;
 
@@ -31,7 +31,7 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
-}  // namespace openxla::compiler::nvgpu::triton
+}  // namespace openxla::compiler::nvgpu::tritonflow
 
 #define GET_OP_CLASSES
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.cpp.inc"

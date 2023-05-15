@@ -77,8 +77,9 @@ struct CudnnOptions {
 
   void bindOptions(OptionsBinder &binder) {
     static llvm::cl::OptionCategory category("OpenXLA cuDNN Plugin");
-    binder.opt<bool>("openxla-cudnn-flag", flag,
-                     llvm::cl::desc("Dummy flag for the OpenXLA cuDNN plugin"),
+    binder.opt<bool>("openxla-nvgpu-flag", flag,
+                     llvm::cl::desc("Dummy flag for the nvgpu plugin"),
+                     llvm::cl::cat(category));
   }
 };
 

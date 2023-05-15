@@ -71,3 +71,40 @@ func.func @conv_HCNW_KCHW_HCNW(%lhs : tensor<56x64x1x56xf32>,
       -> tensor<56x256x1x56xf32>
   return %0 : tensor<56x256x1x56xf32>
 }
+
+// -----
+
+// CHECK-LABEL: @chained_conv_HCNW_KCHW_HCNW
+// CHECK-SAME:  %[[ARG0:.*]]: tensor<56x64x1x56xf32>, %[[ARG1:.*]]: tensor<64x64x1x1xf32>, %[[ARG2:.*]]: tensor<256x64x1x1xf32>
+func.func @chained_conv_HCNW_KCHW_HCNW(%arg : tensor<56x64x1x56xf32>,
+    %f0 : tensor<64x64x1x1xf32>, %f1 : tensor<256x64x1x1xf32>)
+    -> tensor<56x256x1x56xf32> {
+  // CHECK:      %[[TRANSPOSE:.*]] = stablehlo.transpose %[[ARG0]], dims = [2, 0, 3, 1]
+  // CHECK:      %[[CONVOLUTION:.*]] = stablehlo.convolution(%[[TRANSPOSE]], %[[ARG1]])
+  // CHECK-SAME:     dim_numbers = [b, 0, 1, f]x[o, i, 0, 1]->[b, 0, 1, f]
+  // CHECK-SAME:     window = {stride = [1, 1], pad = {{\[\[}}0, 0], [0, 0{{\]\]}}, rhs_dilate = [1, 1]}
+  // CHECK-SAME:     batch_group_count = 1
+  // CHECK-SAME:     feature_group_count = 1
+  // CHECK:      %[[CONVOLUTION_0:.*]] = stablehlo.convolution(%[[CONVOLUTION]], %[[ARG2]])
+  // CHECK-SAME:     dim_numbers = [b, 0, 1, f]x[o, i, 0, 1]->[b, 0, 1, f]
+  // CHECK-SAME:     window = {stride = [1, 1], pad = {{\[\[}}0, 0], [0, 0{{\]\]}}, rhs_dilate = [1, 1]}
+  // CHECK-SAME:     batch_group_count = 1
+  // CHECK-SAME:     feature_group_count = 1
+  // CHECK:      %[[TRANSPOSE_0:.*]] = stablehlo.transpose %[[CONVOLUTION_0]], dims = [1, 3, 0, 2]
+  // CHECK:      return %[[TRANSPOSE_0]]
+  %0 = stablehlo.convolution(%arg, %f0)
+      dim_numbers = [0, f, b, 1]x[o, i, 0, 1]->[0, f, b, 1],
+      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], rhs_dilate = [1, 1]} {
+      batch_group_count = 1 : i64,
+      feature_group_count = 1 : i64}
+      : (tensor<56x64x1x56xf32>, tensor<64x64x1x1xf32>)
+      -> tensor<56x64x1x56xf32>
+  %1 = stablehlo.convolution(%0, %f1)
+      dim_numbers = [0, f, b, 1]x[o, i, 0, 1]->[0, f, b, 1],
+      window = {stride = [1, 1], pad = [[0, 0], [0, 0]], rhs_dilate = [1, 1]} {
+      batch_group_count = 1 : i64,
+      feature_group_count = 1 : i64}
+      : (tensor<56x64x1x56xf32>, tensor<256x64x1x1xf32>)
+      -> tensor<56x256x1x56xf32>
+  return %1 : tensor<56x256x1x56xf32>
+}

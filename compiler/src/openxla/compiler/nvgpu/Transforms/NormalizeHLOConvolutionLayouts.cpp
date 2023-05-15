@@ -6,6 +6,7 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
 #include "stablehlo/dialect/StablehloOps.h"
@@ -136,6 +137,40 @@ struct NormalizeConvolutionLayoutPattern
   Layout tensorLayout, kernelLayout;
 };
 
+LogicalResult eliminateIdentityTranspose(stablehlo::TransposeOp op,
+                                         PatternRewriter& rewriter) {
+  // Eliminate if transpose is the identity.
+  for (const auto& it :
+       llvm::enumerate(op.getPermutation().getValues<APInt>())) {
+    if (it.index() != it.value()) return failure();
+  }
+  rewriter.replaceOp(op, op.getOperand());
+  return success();
+}
+
+LogicalResult composeTranspose(stablehlo::TransposeOp op,
+                               PatternRewriter& rewriter) {
+  // Only apply to chained transposes.
+  auto operandOp = op.getOperand().getDefiningOp<stablehlo::TransposeOp>();
+  if (!operandOp) return failure();
+
+  // Compose permutations.
+  auto operandPermutation = operandOp.getPermutation().getValues<APInt>();
+  auto composedPermutation =
+      op.getPermutation()
+          .mapValues(op.getPermutation().getElementType(),
+                     [&](const APInt& index) -> APInt {
+                       return operandPermutation[index.getSExtValue()];
+                     })
+          .cast<DenseIntElementsAttr>();
+
+  // Create composed transpose op.
+  rewriter.replaceOpWithNewOp<stablehlo::TransposeOp>(
+      op, op.getResult().getType(), operandOp.getOperand(),
+      composedPermutation);
+  return success();
+}
+
 class NormalizeHLOConvolutionLayoutsPass
     : public ::impl::NormalizeHLOConvolutionLayoutsPassBase<
           NormalizeHLOConvolutionLayoutsPass> {
@@ -147,6 +182,8 @@ class NormalizeHLOConvolutionLayoutsPass
     RewritePatternSet patterns(ctx);
     patterns.add<NormalizeConvolutionLayoutPattern>(
         ctx, /*tensorLayout=*/Layout::NHWC, /*kernelLayout*/ Layout::KCHW);
+    patterns.add(composeTranspose);
+    patterns.add(eliminateIdentityTranspose);
 
     if (failed(applyPatternsAndFoldGreedily(getOperation(),
                                             std::move(patterns)))) {

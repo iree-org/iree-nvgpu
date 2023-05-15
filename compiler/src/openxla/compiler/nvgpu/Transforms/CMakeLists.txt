@@ -18,6 +18,7 @@ iree_cc_library(
     "Passes.h.inc"
   SRCS
     "ConvertHLOToCUDNN.cpp"
+    "NormalizeHLOConvolutionLayouts.cpp"
   DEPS
     ::PassesIncGen
     MLIRIR

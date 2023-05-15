@@ -9,6 +9,7 @@ iree_lit_test_suite(
     lit
   SRCS
     "hlo_to_cudnn.mlir"
+    "normalize_hlo_convolution_layouts.mlir"
   TOOLS
     FileCheck
     iree-compile

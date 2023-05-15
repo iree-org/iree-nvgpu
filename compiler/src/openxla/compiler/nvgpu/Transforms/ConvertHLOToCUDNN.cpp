@@ -4,6 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
+
 #include <algorithm>
 #include <numeric>
 
@@ -11,9 +13,8 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
-#include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
 
-#define GEN_PASS_DEF_CONVERTHLOTOCUDNN
+#define GEN_PASS_DEF_CONVERTHLOTOCUDNNPASS
 #include "openxla/compiler/nvgpu/Transforms/Passes.h.inc"
 
 using namespace mlir;
@@ -22,8 +23,8 @@ namespace openxla::compiler::nvgpu::cudnn {
 
 namespace {
 
-class ConvertHLOToCUDNN : public ::impl::ConvertHLOToCUDNNBase<
-    ConvertHLOToCUDNN> {
+class ConvertHLOToCUDNNPass
+    : public ::impl::ConvertHLOToCUDNNPassBase<ConvertHLOToCUDNNPass> {
  public:
   void runOnOperation() override {
     auto apply = [&](auto populatePatterns) {
@@ -41,7 +42,7 @@ class ConvertHLOToCUDNN : public ::impl::ConvertHLOToCUDNNBase<
 }  // namespace
 
 std::unique_ptr<OperationPass<ModuleOp>> createConvertHLOToCUDNNPass() {
-  return std::make_unique<ConvertHLOToCUDNN>();
+  return std::make_unique<ConvertHLOToCUDNNPass>();
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

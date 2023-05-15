@@ -20,6 +20,7 @@ iree_lit_test_suite(
     "conv2d.mlir"
     "e2e_conv2d.mlir"
     "e2e_resnet50_fake_weights.mlir"
+    "e2e_resnet50_subset.mlir"
   TOOLS
     FileCheck
     iree-compile

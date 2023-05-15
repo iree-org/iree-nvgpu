@@ -37,7 +37,7 @@ struct NvgpuOptions {
   bool flag = false;
 
   void bindOptions(OptionsBinder &binder) {
-    static llvm::cl::OptionCategory category("IREE Example Plugin");
+    static llvm::cl::OptionCategory category("IREE NVGPU Plugin");
     binder.opt<bool>("openxla-nvgpu-flag", flag,
                      llvm::cl::desc("Dummy flag for the nvgpu plugin"),
                      llvm::cl::cat(category));

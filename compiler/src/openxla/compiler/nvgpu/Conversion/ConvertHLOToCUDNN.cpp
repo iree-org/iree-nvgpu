@@ -61,8 +61,8 @@ static FailureOr<Layout> getCudnnKernelLayout(int64_t inputDim,
   if (outputDim != 0) return failure();
   // Return input/output layout instead of the kernel layout so that casts
   // cancel themselves. The actual layouts are the same and the lowering and
-  // runtime implementation handle it correctly. Eventually, this should be
-  // replaced by layout propagation.
+  // runtime implementation handle it correctly. TODO(chsigg): revert when
+  // layout propagation is implemented.
   if (inputDim == 1) return Layout::NCHW;  // KCHW
   if (inputDim == 3) return Layout::NHWC;  // KHWC
   return failure();

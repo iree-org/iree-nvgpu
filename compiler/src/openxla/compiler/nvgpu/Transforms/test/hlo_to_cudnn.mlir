@@ -36,8 +36,8 @@ func.func @test_relu(%argument: tensor<1x16x32x8xf32>) -> tensor<1x16x32x8xf32> 
 // CHECK-SAME:   dilation = [1, 1]
 // CHECK:      cudnn.return %[[CONVOLUTION]]
 
-// CHECK: @test_conv(%[[ARG0]]: tensor<100x32x26x26xf32>, %[[ARG1]]: tensor<1x32x3x3xf32>)
-func.func @test_conv(%x : tensor<100x32x26x26xf32>, %w : tensor<1x32x3x3xf32>) -> tensor<100x1x28x28xf32> {
+// CHECK: @test_conv_NCHW(%[[ARG0]]: tensor<100x32x26x26xf32>, %[[ARG1]]: tensor<1x32x3x3xf32>)
+func.func @test_conv_NCHW(%x : tensor<100x32x26x26xf32>, %w : tensor<1x32x3x3xf32>) -> tensor<100x1x28x28xf32> {
   // CHECK: %[[DEVICE_0:.*]] = hal.ex.shared_device
   // CHECK: %[[HANDLE_0:.*]] = cudnn.handle(%[[DEVICE_0]])
   // CHECK: %[[CALL_0:.*]] = cudnn.call handle(%[[HANDLE_0]]) @stablehlo.convolution(%[[ARG0]], %[[ARG1]])
@@ -79,8 +79,8 @@ func.func @test_conv(%x : tensor<100x32x26x26xf32>, %w : tensor<1x32x3x3xf32>) -
 // CHECK-SAME:   dilation = [1, 1]
 // CHECK:      cudnn.return %[[CONVOLUTION]]
 
-// CHECK: @test_conv(%[[ARG0]]: tensor<100x26x26x32xf32>, %[[ARG1]]: tensor<1x3x3x32xf32>)
-func.func @test_conv(%x : tensor<100x26x26x32xf32>, %w : tensor<1x3x3x32xf32>) -> tensor<100x28x28x1xf32> {
+// CHECK: @test_conv_NHWC(%[[ARG0]]: tensor<100x26x26x32xf32>, %[[ARG1]]: tensor<1x3x3x32xf32>)
+func.func @test_conv_NHWC(%x : tensor<100x26x26x32xf32>, %w : tensor<1x3x3x32xf32>) -> tensor<100x28x28x1xf32> {
   // CHECK: %[[DEVICE_0:.*]] = hal.ex.shared_device
   // CHECK: %[[HANDLE_0:.*]] = cudnn.handle(%[[DEVICE_0]])
   // CHECK: %[[CALL_0:.*]] = cudnn.call handle(%[[HANDLE_0]]) @stablehlo.convolution(%[[ARG0]], %[[ARG1]])

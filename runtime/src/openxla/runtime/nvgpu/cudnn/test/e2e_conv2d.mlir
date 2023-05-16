@@ -1,24 +1,24 @@
-// RUN: iree-compile %s --iree-plugin=openxla-cudnn \
+// RUN: iree-compile %s --iree-plugin=openxla-cudnn                            \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
 // RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
-// RUN:     2> %t-ir-after-all                                                 \
+// RUN:     2> %t-ir                                                           \
 // RUN: | iree-run-module --module=- --device=cuda --function=test_conv        \
 // RUN: | FileCheck %s
 
-// RUN: cat %t-ir-after-all                                                    \
+// RUN: cat %t-ir                                                              \
 // RUN: | FileCheck %s --check-prefix=CHECK-IR
 
 
 util.global @x : tensor<100x26x26x32xf32> = dense<1.0> : tensor<100x26x26x32xf32>
-util.global @w : tensor<32x3x3x32xf32> = dense<1.0> : tensor<32x3x3x32xf32>
+util.global @w : tensor<64x3x3x32xf32> = dense<1.0> : tensor<64x3x3x32xf32>
 
 // CHECK: @test_conv
-// CHECK: 100x26x26x32xf32
+// CHECK: 100x26x26x64xf32
 // CHECK: [128 128 128 128 128
 // CHECK: [192 192 192 192 192
-func.func @test_conv() -> tensor<100x26x26x32xf32> {
+func.func @test_conv() -> tensor<100x26x26x64xf32> {
   %x = util.global.load @x : tensor<100x26x26x32xf32>
-  %w = util.global.load @w : tensor<32x3x3x32xf32>
+  %w = util.global.load @w : tensor<64x3x3x32xf32>
   %result = "stablehlo.convolution"(%x, %w) {
       batch_group_count = 1 : i64,
       dimension_numbers = #stablehlo.conv<raw
@@ -36,9 +36,9 @@ func.func @test_conv() -> tensor<100x26x26x32xf32> {
       padding = dense<1> : tensor<2x2xi64>,
       rhs_dilation = dense<1> : tensor<2xi64>,
       window_strides = dense<1> : tensor<2xi64> }
-      : (tensor<100x26x26x32xf32>, tensor<32x3x3x32xf32>)
-      -> tensor<100x26x26x32xf32>
-  func.return %result : tensor<100x26x26x32xf32>
+      : (tensor<100x26x26x32xf32>, tensor<64x3x3x32xf32>)
+      -> tensor<100x26x26x64xf32>
+  func.return %result : tensor<100x26x26x64xf32>
 }
 
 

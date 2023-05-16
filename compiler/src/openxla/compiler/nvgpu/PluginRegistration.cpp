@@ -9,6 +9,7 @@
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
@@ -21,14 +22,18 @@ using namespace mlir::iree_compiler;
 // TODO(ezhulenev): Move passes registration to `Passes.h`.
 namespace detail {
 namespace {
+
 #define GEN_PASS_REGISTRATION
 #include "openxla/compiler/nvgpu/Transforms/Passes.h.inc"
+
 }  // namespace
 
 namespace cudnn {
 namespace {
+
 #define GEN_PASS_REGISTRATION
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
+
 }  // namespace
 }  // namespace cudnn
 
@@ -71,6 +76,7 @@ IREE_DEFINE_COMPILER_OPTION_FLAGS(TritonOptions);
 //===----------------------------------------------------------------------===//
 
 namespace {
+
 using namespace ::openxla::compiler::nvgpu::cudnn;
 
 struct CudnnOptions {
@@ -97,6 +103,8 @@ struct CudnnSession : public PluginSession<CudnnSession, CudnnOptions> {
   void extendInputConversionPreprocessingPassPipeline(
       OpPassManager &pm, InputDialectOptions::Type inputType) override {
     if (inputType == InputDialectOptions::Type::stablehlo) {
+      pm.addNestedPass<func::FuncOp>(
+          createNormalizeHLOConvolutionLayoutsPass(Layout::NHWC, Layout::KHWC));
       pm.addPass(createConvertHLOToCUDNNPass());
     }
   }

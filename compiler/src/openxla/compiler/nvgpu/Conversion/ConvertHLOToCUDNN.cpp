@@ -6,13 +6,18 @@
 
 #include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
 
+#include <algorithm>
+#include <iterator>
+
 #include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Matchers.h"
+#include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNOps.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
@@ -22,6 +27,8 @@ namespace openxla::compiler::nvgpu::cudnn {
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
+
+using TensorValue = TypedValue<TensorType>;
 
 static CudnnTensorType getCudnnTensorType(mlir::TensorType type,
                                           Layout layout) {
@@ -52,15 +59,19 @@ static FailureOr<Layout> getCudnnKernelLayout(int64_t inputDim,
                                               int64_t outputDim,
                                               MLIRContext* ctx) {
   if (outputDim != 0) return failure();
-  if (inputDim == 1) return Layout::KCHW;
-  if (inputDim == 3) return Layout::KHWC;
+  // Return input/output layout instead of the kernel layout so that casts
+  // cancel themselves. The actual layouts are the same and the lowering and
+  // runtime implementation handle it correctly. TODO(chsigg): revert when
+  // layout propagation is implemented.
+  if (inputDim == 1) return Layout::NCHW;  // KCHW
+  if (inputDim == 3) return Layout::NHWC;  // KHWC
   return failure();
 }
 
 // Outlines all transitive ops defining 'result' into a cudnn.graph op and calls
 // it with `arguments`.
-static LogicalResult outlineToGraph(TypedValue<TensorType> result,
-                                    ArrayRef<TypedValue<TensorType>> arguments,
+static LogicalResult outlineToGraph(TensorValue result,
+                                    ArrayRef<TensorValue> arguments,
                                     FunctionType funcType,
                                     PatternRewriter& rewriter) {
   Operation* root = result.getDefiningOp();
@@ -201,34 +212,56 @@ static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
   return {{*inputLayout, *kernelLayout, *outputLayout}};
 }
 
-// Matches any clamp 'op' which can be converted to relu and outlines it into
-// a cudnn.graph op.
-// TODO(chsigg): extend this to match a set of ops (determined through a cost
-// model) to run as a single graph.
-static LogicalResult outlineClamp(stablehlo::ClampOp op,
-                                  PatternRewriter& rewriter) {
-  if (failed(matchRelu(op, rewriter))) return failure();
-  auto type = getCudnnTensorType(op.getType(), Layout::NCHW);
-  FunctionType funcType = rewriter.getFunctionType(type, type);
-  return outlineToGraph(op.getResult(), op.getOperand(), funcType, rewriter);
+// Matches defining ops starting from 'result' and returns the graph inputs.
+static LogicalResult outlineToGraph(TensorValue result,
+                                    PatternRewriter& rewriter) {
+  // The layout of the first convolution output, if we encounter such an op.
+  // Eventually, this should be replaced by layout propagation.
+  std::optional<Layout> layout;
+  SmallVector<TensorValue> arguments = {result};
+  for (size_t i = 0; i < arguments.size();) {
+    Operation* defOp = arguments[i].getDefiningOp();
+    if (defOp == nullptr) {
+      ++i;
+      continue;
+    }
+    if (auto op = dyn_cast<stablehlo::ClampOp>(defOp)) {
+      if (succeeded(matchRelu(op, rewriter))) {
+        arguments[i] = op.getOperand();
+      } else {
+        ++i;
+      }
+      continue;
+    }
+    if (auto op = dyn_cast<stablehlo::ConvolutionOp>(defOp)) {
+      auto layouts = matchConv(op, rewriter);
+      if (succeeded(layouts) && (!layout || layout == layouts->output)) {
+        layout = layouts->output;
+        arguments[i] = op.getLhs();
+        arguments.push_back(op.getRhs());
+      } else {
+        ++i;
+      }
+      continue;
+    }
+    ++i;
+  }
+  if (arguments.size() == 1 && arguments.front() == result) return failure();
+  auto getType = [&](TensorValue operand) -> Type {
+    return getCudnnTensorType(operand.getType(), layout.value_or(Layout::NCHW));
+  };
+  FunctionType funcType = rewriter.getFunctionType(
+      to_vector(map_range(arguments, getType)), getType(result));
+  return outlineToGraph(result, arguments, funcType, rewriter);
 }
 
-static LogicalResult outlineConv(stablehlo::ConvolutionOp op,
-                                 PatternRewriter& rewriter) {
-  auto convLayouts = matchConv(op, rewriter);
-  if (failed(convLayouts)) return failure();
-  auto inputType =
-      getCudnnTensorType(op.getLhs().getType(), convLayouts->input);
-  auto kernelType =
-      getCudnnTensorType(op.getRhs().getType(), convLayouts->kernel);
-  auto outputType = getCudnnTensorType(op.getType(), convLayouts->output);
-  FunctionType funcType =
-      rewriter.getFunctionType({inputType, kernelType}, outputType);
-  return outlineToGraph(op.getResult(), {op.getLhs(), op.getRhs()}, funcType,
-                        rewriter);
+// Pattern entry point to outline a cudnn.graph with 'root'.
+template <typename OpTy>
+static LogicalResult outlineToGraph(OpTy root, PatternRewriter& rewriter) {
+  return outlineToGraph(root.getResult(), rewriter);
 }
 
-static Value castToCudnnTensor(TypedValue<TensorType> value, Layout layout,
+static Value castToCudnnTensor(TensorValue value, Layout layout,
                                PatternRewriter& rewriter) {
   CudnnTensorType tensorType = getCudnnTensorType(value.getType(), layout);
   auto castOp = rewriter.create<UnrealizedConversionCastOp>(value.getLoc(),
@@ -239,15 +272,23 @@ static Value castToCudnnTensor(TypedValue<TensorType> value, Layout layout,
 // Converts a clamp 'op' into a cudnn.pointwise_relu.
 static LogicalResult convertClamp(stablehlo::ClampOp op,
                                   PatternRewriter& rewriter) {
-  if (!op->getParentOfType<GraphOp>())
-    return rewriter.notifyMatchFailure(op, "expected child of graph");
+  auto graph = op->getParentOfType<GraphOp>();
+  if (!graph) return rewriter.notifyMatchFailure(op, "expected child of graph");
   auto minOr = matchRelu(op, rewriter);
   if (failed(minOr)) return failure();
-  Type resultType = getCudnnTensorType(op.getType(), Layout::NCHW);
-  Value operand = castToCudnnTensor(op.getOperand(), Layout::NCHW, rewriter);
+  // Lookup layout from graph result type. This assumes that the layout is
+  // consistent across the graph. TODO(csigg): propagate layout to attribute.
+  Layout layout =
+      *cast<CudnnTensorType>(graph.getFunctionType().getResult(0)).getLayout();
+  Type resultType = getCudnnTensorType(op.getType(), layout);
+  Value operand = castToCudnnTensor(op.getOperand(), layout, rewriter);
   Type elementType = op.getType().getElementType();
-  rewriter.replaceOpWithNewOp<ReluOp>(op, resultType, operand, elementType,
-                                      APFloat(minOr->convertToDouble()));
+
+  ReluOp reluOp =
+      rewriter.create<ReluOp>(op.getLoc(), resultType, operand, elementType,
+                              APFloat(minOr->convertToDouble()));
+  rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, resultType,
+                                                          reluOp.getResult());
   return success();
 }
 
@@ -290,15 +331,17 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
     postPadding.push_back(padding[2 * i + 1]);
   }
 
-  rewriter.replaceOpWithNewOp<ConvolutionOp>(
-      op, resultType, lhs, rhs, alpha, beta, spatialDimCount, spatialStride,
-      prePadding, postPadding, dilation);
+  ConvolutionOp convOp = rewriter.create<ConvolutionOp>(
+      op.getLoc(), resultType, lhs, rhs, alpha, beta, spatialDimCount,
+      spatialStride, prePadding, postPadding, dilation);
+  rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, resultType,
+                                                          convOp.getResult());
   return success();
 }
 
 void populateOutlineHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {
-  patterns.add(&outlineClamp);
-  patterns.add(&outlineConv);
+  patterns.add(&outlineToGraph<stablehlo::ClampOp>);
+  patterns.add(&outlineToGraph<stablehlo::ConvolutionOp>);
 }
 
 void populateConvertHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {

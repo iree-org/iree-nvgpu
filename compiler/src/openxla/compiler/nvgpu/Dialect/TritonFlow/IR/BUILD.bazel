@@ -1,0 +1,81 @@
+# Copyright 2023 The OpenXLA Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_td_library(
+    name = "td_files",
+    srcs = enforce_glob(
+        [
+            "TritonFlowDialect.td",
+            "TritonFlowOps.td",
+        ],
+        include = ["*.td"],
+    ),
+    deps = [
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+cc_library(
+    name = "IR",
+    srcs = [
+        "TritonFlowDialect.cpp",
+        "TritonFlowOps.cpp",
+    ],
+    hdrs = [
+        "TritonFlowDialect.h",
+        "TritonFlowOps.h",
+    ],
+    textual_hdrs = [
+        "TritonFlowDialect.h.inc",
+        "TritonFlowDialect.cpp.inc",
+        "TritonFlowOps.h.inc",
+        "TritonFlowOps.cpp.inc",
+    ],
+    deps = [
+        ":TritonFlowOpsGen",
+        "//compiler/src/openxla/compiler/nvgpu:defs",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+iree_gentbl_cc_library(
+    name = "TritonFlowOpsGen",
+    tbl_outs = [
+        (
+            [
+                "--gen-dialect-decls",
+                "--dialect=triton",
+            ],
+            "TritonFlowDialect.h.inc",
+        ),
+        (
+            [
+                "--gen-dialect-defs",
+                "--dialect=triton",
+            ],
+            "TritonFlowDialect.cpp.inc",
+        ),
+        (
+            ["--gen-op-decls"],
+            "TritonFlowOps.h.inc",
+        ),
+        (
+            ["--gen-op-defs"],
+            "TritonFlowOps.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TritonFlowOps.td",
+    deps = [":td_files"],
+)

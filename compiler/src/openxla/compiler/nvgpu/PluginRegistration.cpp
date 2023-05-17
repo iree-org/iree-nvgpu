@@ -5,10 +5,14 @@
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
 #include "iree/compiler/PluginAPI/Client.h"
+#include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
 
 using namespace mlir;
 using namespace mlir::iree_compiler;
@@ -29,50 +33,90 @@ namespace {
 
 }  // namespace detail
 
+//===----------------------------------------------------------------------===//
+// OpenXLA compiler Triton plugin
+//===----------------------------------------------------------------------===//
+
 namespace {
+using namespace ::openxla::compiler::nvgpu::tritonflow;
 
-namespace cudnn = openxla::compiler::nvgpu::cudnn;
+struct TritonOptions {
+  void bindOptions(OptionsBinder &binder) {}
+};
 
-struct NvgpuOptions {
+struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
+  static void registerPasses() {
+    registerOpenXlaTritonPases();
+    registerOpenXlaTritonPipelines();
+  }
+
+  void onRegisterDialects(DialectRegistry &registry) override {
+    registry.insert<TritonFlowDialect>();
+    registry.insert<triton::TritonDialect>();
+    registry.insert<NVVM::NVVMDialect>();
+  }
+
+  void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    pm.addPass(createConvertTritonToFlowDispatchPass());
+  }
+};
+
+}  // namespace
+
+IREE_DEFINE_COMPILER_OPTION_FLAGS(TritonOptions);
+
+//===----------------------------------------------------------------------===//
+// OpenXLA compiler cuDNN  plugin
+//===----------------------------------------------------------------------===//
+
+namespace {
+using namespace ::openxla::compiler::nvgpu::cudnn;
+
+struct CudnnOptions {
   bool flag = false;
 
   void bindOptions(OptionsBinder &binder) {
-    static llvm::cl::OptionCategory category("OpenXLA NVGPU Plugin");
+    static llvm::cl::OptionCategory category("OpenXLA cuDNN Plugin");
     binder.opt<bool>("openxla-nvgpu-flag", flag,
                      llvm::cl::desc("Dummy flag for the nvgpu plugin"),
                      llvm::cl::cat(category));
   }
 };
 
-struct NvgpuSession : public PluginSession<NvgpuSession, NvgpuOptions> {
+struct CudnnSession : public PluginSession<CudnnSession, CudnnOptions> {
   static void registerPasses() {
     ::detail::registerPasses();
     ::detail::cudnn::registerPasses();
   }
 
   void onRegisterDialects(DialectRegistry &registry) override {
-    registry.insert<cudnn::CUDNNDialect>();
+    registry.insert<CUDNNDialect>();
   }
 
   void extendInputConversionPreprocessingPassPipeline(
       OpPassManager &pm, InputDialectOptions::Type inputType) override {
     if (inputType == InputDialectOptions::Type::stablehlo) {
-      pm.addPass(cudnn::createConvertHLOToCUDNNPass());
+      pm.addPass(createConvertHLOToCUDNNPass());
     }
   }
 
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
-    pm.addPass(cudnn::createExpandCudnnOperationsPass());
-    pm.addPass(cudnn::createConvertCudnnToRuntimePass());
+    pm.addPass(createExpandCudnnOperationsPass());
+    pm.addPass(createConvertCudnnToRuntimePass());
   }
 };
 
 }  // namespace
 
-IREE_DEFINE_COMPILER_OPTION_FLAGS(NvgpuOptions);
+IREE_DEFINE_COMPILER_OPTION_FLAGS(CudnnOptions);
+
+//===----------------------------------------------------------------------===//
+// OpenXLA compiler plugins registration
+//===----------------------------------------------------------------------===//
 
 extern "C" bool iree_register_compiler_plugin_openxla_nvgpu(
     mlir::iree_compiler::PluginRegistrar *registrar) {
-  registrar->registerPlugin<NvgpuSession>("openxla_nvgpu");
+  registrar->registerPlugin<CudnnSession>("openxla_nvgpu");
+  registrar->registerPlugin<TritonSession>("openxla-triton");
   return true;
 }

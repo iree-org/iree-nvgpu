@@ -1,4 +1,4 @@
-// RUN: iree-compile %s --iree-plugin=openxla_nvgpu \
+// RUN: iree-compile %s --iree-plugin=openxla-cudnn \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
 // RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
 // RUN:     2> %t-ir-after-all                                                 \

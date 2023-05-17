@@ -146,7 +146,7 @@ IREE_DEFINE_COMPILER_OPTION_FLAGS(TransformPreprocessingOptions);
 
 extern "C" bool iree_register_compiler_plugin_openxla_nvgpu(
     mlir::iree_compiler::PluginRegistrar *registrar) {
-  registrar->registerPlugin<CudnnSession>("openxla_nvgpu");
+  registrar->registerPlugin<CudnnSession>("openxla-cudnn");
   registrar->registerPlugin<TritonSession>("openxla-triton");
   registrar->registerPlugin<TransformPreprocessingSession>("openxla-transform");
   return true;

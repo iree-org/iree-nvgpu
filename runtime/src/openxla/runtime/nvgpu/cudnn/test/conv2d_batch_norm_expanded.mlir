@@ -1,4 +1,4 @@
-// RUN: iree-compile --iree-plugin=openxla_nvgpu --iree-input-type=mhlo        \
+// RUN: iree-compile --iree-plugin=openxla-cudnn --iree-input-type=mhlo        \
 // RUN:              --iree-hal-target-backends=cuda %s                        \
 // RUN: | iree-run-module --module=- --device=cuda --function=main             \
 // RUN: | FileCheck %s

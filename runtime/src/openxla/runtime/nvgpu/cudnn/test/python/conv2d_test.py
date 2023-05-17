@@ -50,7 +50,7 @@ def create_simple_mul_module(instance):
       }
     }""",
                                      target_backends=["cuda"],
-                                     extra_args=["--iree-plugin=openxla_nvgpu"])
+                                     extra_args=["--iree-plugin=openxla-cudnn"])
   m = iree.runtime.VmModule.from_flatbuffer(instance, binary)
   return m
 

@@ -1,4 +1,4 @@
-// RUN: iree-opt %s --split-input-file --iree-plugin=openxla_nvgpu             \
+// RUN: iree-opt %s --split-input-file --iree-plugin=openxla-cudnn             \
 // RUN:     --openxla-nvgpu-convert-hlo-to-cudnn                               \
 // RUN: | FileCheck %s
 

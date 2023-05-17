@@ -1,5 +1,5 @@
-// RUN: iree-opt --iree-plugin=openxla_nvgpu --split-input-file %s \
-// RUN:   | iree-opt --iree-plugin=openxla_nvgpu --split-input-file \
+// RUN: iree-opt --iree-plugin=openxla-cudnn --split-input-file %s \
+// RUN:   | iree-opt --iree-plugin=openxla-cudnn --split-input-file \
 // RUN:   | FileCheck %s
 
 func.func @main(%arg0: !hal.device) -> !cudnn.handle {

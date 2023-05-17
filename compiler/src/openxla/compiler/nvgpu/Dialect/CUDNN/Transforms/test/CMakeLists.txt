@@ -16,6 +16,7 @@ iree_lit_test_suite(
   SRCS
     "cudnn_to_runtime.mlir"
     "expand_batch_norm.mlir"
+    "normalize_hlo_convolution_layouts.mlir"
   TOOLS
     FileCheck
     iree-opt

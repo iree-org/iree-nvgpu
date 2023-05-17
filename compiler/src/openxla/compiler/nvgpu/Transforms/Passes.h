@@ -7,16 +7,11 @@
 #ifndef OPENXLA_NVGPU_TRANSFORMS_PASSES_H_
 #define OPENXLA_NVGPU_TRANSFORMS_PASSES_H_
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
 namespace openxla::compiler::nvgpu::cudnn {
-
-// Normalizes stable HLO convolution layouts so they can be mapped to cudnn
-std::unique_ptr<mlir::OperationPass<mlir::func::FuncOp>>
-createNormalizeHLOConvolutionLayoutsPass();
 
 // Converts stable HLO ops to cudnn ops
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>

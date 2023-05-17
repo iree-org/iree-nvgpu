@@ -9,17 +9,6 @@ include "mlir/Pass/PassBase.td"
 #ifndef OPENXLA_NVGPU_TRANSFORMS_PASSES_TD_
 #define OPENXLA_NVGPU_TRANSFORMS_PASSES_TD_
 
-def NormalizeHLOConvolutionLayoutsPass : Pass<
-    "openxla-nvgpu-normalize-hlo-convolution-layouts", "mlir::func::FuncOp"> {
-  let summary = "Normalizes stable HLO convolution layouts";
-  let constructor = [{
-    ::openxla::compiler::nvgpu::cudnn::createNormalizeHLOConvolutionLayoutsPass()
-  }];
-  let dependentDialects = [
-    "mlir::stablehlo::StablehloDialect",
-  ];
-}
-
 def ConvertHLOToCUDNNPass : Pass<"openxla-nvgpu-convert-hlo-to-cudnn",
     "mlir::ModuleOp"> {
   let summary = "Converts stable HLO ops to cudnn ops";

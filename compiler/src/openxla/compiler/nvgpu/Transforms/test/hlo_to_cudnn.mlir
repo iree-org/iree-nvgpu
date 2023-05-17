@@ -94,11 +94,11 @@ func.func @test_conv(
 // CHECK-SAME:     : (!cudnn.tensor<100x1x28x28xf32, NHWC>) -> !cudnn.tensor<100x1x28x28xf32, NHWC>
 // CHECK:        cudnn.return %[[RESULT]]
 
-// CHECK:      @test_conv(
+// CHECK:      @test_graph(
 // CHECK-SAME:   %[[INPUT]]: tensor<100x26x26x32xf32>,
 // CHECK-SAME:   %[[FILTER]]: tensor<1x3x3x32xf32>
 // CHECK-SAME: ) -> tensor<100x28x28x1xf32> {
-func.func @test_conv(
+func.func @test_graph(
   %input : tensor<100x26x26x32xf32>,
   %filter : tensor<1x3x3x32xf32>
 ) -> tensor<100x28x28x1xf32> {

@@ -4,15 +4,13 @@
 # See https://llvm.org/LICENSE.txt for license information.
 # SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-iree_lit_test_suite(
+if(NOT IREE_HAL_DRIVER_CUDA OR NOT IREE_TARGET_BACKEND_CUDA)
+  return()
+endif()
+
+iree_py_test(
   NAME
-    lit
+    conv2d_test
   SRCS
-    "hlo_to_cudnn.mlir"
-    "normalize_hlo_convolution_layouts.mlir"
-  TOOLS
-    FileCheck
-    iree-compile
-  LABELS
-    "hostonly"
+    "conv2d_test.py"
 )

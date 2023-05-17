@@ -1,4 +1,4 @@
-// RUN: iree-opt %s --iree-plugin=openxla_nvgpu --split-input-file --verify-diagnostics
+// RUN: iree-opt %s --iree-plugin=openxla-cudnn --split-input-file --verify-diagnostics
 
 // expected-error @+1 {{requires all arguments to be non-opaque cuDNN tensors}}
 cudnn.graph @g(%arg0: tensor<?x?x?xf32>) -> tensor<?x?x?xf32> {

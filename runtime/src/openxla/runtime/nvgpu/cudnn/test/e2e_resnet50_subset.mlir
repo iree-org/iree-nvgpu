@@ -1,4 +1,4 @@
-// RUN: iree-compile %s --iree-plugin=openxla_nvgpu                            \
+// RUN: iree-compile %s --iree-plugin=openxla-cudnn                            \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
 // RUN: | iree-run-module --module=- --device=cuda --function=predict          \
 // RUN:     --input=1x56x56x64xf32                                             \

@@ -32,9 +32,7 @@ using namespace iree;
 
 using cudnn_frontend::TensorBuilder;
 
-// clang-format off
 #include "openxla/runtime/nvgpu/cudnn/cudnn_stub.h.inc"
-// clang-format on
 
 static std::vector<CudnnTensor*> AsPtrs(span<const vm::ref<CudnnTensor>> refs) {
   std::vector<CudnnTensor*> ptrs;
@@ -644,7 +642,8 @@ StatusOr<vm::ref<CudnnTensor>> CreateConvolution(
   }
 
   // Compute convolution output dimensions.
-  std::vector<int64_t> output_dims = {x_dims[0], x_dims[1]};  // [N, C]
+  std::vector<int64_t> output_dims = {x_dims[0], w_dims[0]};  // [N, C]
+
   for (int d = 0; d < kSpatialDims; ++d) {
     output_dims.push_back(GetFwdConvOutputDim(x_dims[d + 2], pre_padding[d],
                                               post_padding[d], w_dims[d + 2],

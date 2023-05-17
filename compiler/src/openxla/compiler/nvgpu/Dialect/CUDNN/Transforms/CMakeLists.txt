@@ -41,10 +41,12 @@ iree_cc_library(
   SRCS
     "ConvertCUDNNToRuntime.cpp"
     "ExpandCUDNNOperations.cpp"
+    "NormalizeHLOConvolutionLayouts.cpp"
   DEPS
     ::PassHeaders
     MLIRPass
     openxla::compiler::nvgpu::Dialect::CUDNN::Conversion::CUDNNToRuntime
+    StablehloOps
   PUBLIC
 )
 

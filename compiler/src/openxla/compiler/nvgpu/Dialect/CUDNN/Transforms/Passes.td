@@ -48,4 +48,15 @@ def ConvertCudnnToRuntime :
   ];
 }
 
+def NormalizeHLOConvolutionLayoutsPass : Pass<
+    "openxla-nvgpu-normalize-hlo-convolution-layouts", "mlir::func::FuncOp"> {
+  let summary = "Normalizes stable HLO convolution layouts";
+  let constructor = [{
+    ::openxla::compiler::nvgpu::cudnn::createNormalizeHLOConvolutionLayoutsPass()
+  }];
+  let dependentDialects = [
+    "mlir::stablehlo::StablehloDialect",
+  ];
+}
+
 #endif // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_

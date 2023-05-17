@@ -10,6 +10,7 @@
 #include <compiler/src/iree/compiler/Dialect/HAL/IR/HALDialect.h>
 #include <compiler/src/iree/compiler/Dialect/Util/IR/UtilDialect.h>
 
+#include "stablehlo/dialect/StablehloOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"

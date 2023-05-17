@@ -12,7 +12,7 @@
 #include "stablehlo/dialect/StablehloOps.h"
 
 #define GEN_PASS_DEF_NORMALIZEHLOCONVOLUTIONLAYOUTSPASS
-#include "openxla/compiler/nvgpu/Transforms/Passes.h.inc"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
 
 using namespace mlir;
 

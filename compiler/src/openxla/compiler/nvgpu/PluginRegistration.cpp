@@ -4,6 +4,7 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree/compiler/Codegen/Passes.h"
 #include "iree/compiler/PluginAPI/Client.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Pass/Pass.h"
@@ -111,6 +112,35 @@ struct CudnnSession : public PluginSession<CudnnSession, CudnnOptions> {
 IREE_DEFINE_COMPILER_OPTION_FLAGS(CudnnOptions);
 
 //===----------------------------------------------------------------------===//
+// OpenXLA compiler Transform dialect plugin
+//===----------------------------------------------------------------------===//
+
+struct TransformPreprocessingOptions {
+  std::string preprocessingTransformFileName;
+
+  void bindOptions(OptionsBinder &binder) {
+    static llvm::cl::OptionCategory category(
+        "OpenXLA Transform Preprocessing Plugin");
+    binder.opt<std::string>(
+        "openxla-transform-preprocessing", preprocessingTransformFileName,
+        llvm::cl::desc("Preprocessing transform dialect script file name"),
+        llvm::cl::cat(category));
+  }
+};
+
+struct TransformPreprocessingSession
+    : public PluginSession<TransformPreprocessingSession,
+                           TransformPreprocessingOptions> {
+  void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    if (!options.preprocessingTransformFileName.empty())
+      pm.addPass(iree_compiler::createTransformDialectInterpreterPass(
+          options.preprocessingTransformFileName));
+  }
+};
+
+IREE_DEFINE_COMPILER_OPTION_FLAGS(TransformPreprocessingOptions);
+
+//===----------------------------------------------------------------------===//
 // OpenXLA compiler plugins registration
 //===----------------------------------------------------------------------===//
 
@@ -118,5 +148,6 @@ extern "C" bool iree_register_compiler_plugin_openxla_nvgpu(
     mlir::iree_compiler::PluginRegistrar *registrar) {
   registrar->registerPlugin<CudnnSession>("openxla_nvgpu");
   registrar->registerPlugin<TritonSession>("openxla-triton");
+  registrar->registerPlugin<TransformPreprocessingSession>("openxla-transform");
   return true;
 }

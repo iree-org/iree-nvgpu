@@ -209,6 +209,9 @@ struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
       return rewriter.notifyMatchFailure(
           op, "Failed to lower Triton function to LLVM IR");
 
+    // TODO(ezhulenev): Executable object supports `data` attribute, check if
+    // it works for embedding Triton PTX.
+
     // Write PTX to a temp file, so that we can constuct an HAL executable.
     SmallVector<char, 128> tmpPath;
     llvm::sys::path::system_temp_directory(/*erasedOnReboot=*/true, tmpPath);

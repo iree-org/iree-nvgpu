@@ -1,7 +1,7 @@
 build/
 
-# IREE Python virtual environment
-iree.venv/
+# Python virtual environments
+*.venv/
 
 # Source indexing files
 compile_commands.json

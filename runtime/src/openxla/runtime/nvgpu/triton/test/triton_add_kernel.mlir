@@ -33,7 +33,7 @@ func.func @main(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf3
   %grid = affine.apply affine_map<()[s0] -> (s0 ceildiv 64)>()[%dim]
   %dim_i32 = arith.index_cast %dim : index to i32
 
-  %0 = triton.dispatch @add_kernel[%grid](%dim_i32, %arg0, %arg1)
+  %0 = triton.call @add_kernel[%grid](%dim_i32, %arg0, %arg1)
     : (i32, tensor<128xf32>, tensor<128xf32>) -> tensor<128xf32>
 
   return %0 : tensor<128xf32>

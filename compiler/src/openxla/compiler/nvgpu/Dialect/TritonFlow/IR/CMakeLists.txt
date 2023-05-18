@@ -29,6 +29,7 @@ iree_cc_library(
     LLVMSupport
     MLIRIR
     MLIRSupport
+    iree::compiler::Dialect::Util::IR
     openxla::compiler::nvgpu::defs
   PUBLIC
 )

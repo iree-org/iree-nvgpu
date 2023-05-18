@@ -6,6 +6,7 @@
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
+#include "iree/compiler/Dialect/Util/IR/UtilOps.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -20,14 +21,42 @@
 namespace openxla::compiler::nvgpu::tritonflow {
 
 using namespace mlir;
+using namespace mlir::iree_compiler;
 
 //===----------------------------------------------------------------------===//
-// triton.dispatch operation
+// triton.executable operation
 //===----------------------------------------------------------------------===//
 
-LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  auto fn = symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr());
-  if (!fn) return emitOpError() << "refers to an unknown Triton callee";
+LogicalResult ExecutableOp::verify() {
+  auto innerModules = getBlock().getOps<ModuleOp>();
+
+  if (llvm::count_if(innerModules, [](ModuleOp) { return true; }) != 1)
+    return emitOpError()
+           << "expected exactly one inner builtin.module operation";
+
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// triton.executable.export operation
+//===----------------------------------------------------------------------===//
+
+LogicalResult ExecutableExportOp::verifySymbolUses(
+    SymbolTableCollection &symbolTable) {
+  auto innerModule = getParentOp<ExecutableOp>().getInnerModule();
+  if (!symbolTable.lookupNearestSymbolFrom(innerModule, getFunctionRefAttr())) {
+    return emitOpError() << "refers to an unknown Triton function";
+  }
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// triton.call operation
+//===----------------------------------------------------------------------===//
+
+LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  if (!symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()))
+    return emitOpError() << "refers to an unknown Triton callee";
   return success();
 }
 

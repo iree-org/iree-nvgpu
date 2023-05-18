@@ -43,6 +43,7 @@ cc_library(
     deps = [
         ":TritonFlowOpsGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
+        "@iree_core//compiler/src/iree/compiler/Dialect/Util/IR",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",

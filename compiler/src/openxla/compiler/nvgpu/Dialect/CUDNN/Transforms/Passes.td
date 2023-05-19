@@ -57,6 +57,12 @@ def NormalizeHLOConvolutionLayoutsPass : Pass<
   let dependentDialects = [
     "mlir::stablehlo::StablehloDialect",
   ];
+  let options = [
+    Option<"tensorLayoutOption", "tensor-layout", "std::string", /*default=*/"",
+        "Desired tensor layout for convolution inputs and outputs.">,
+    Option<"kernelLayoutOption", "kernel-layout", "std::string", /*default=*/"",
+        "Desired kernel layout for convolutions.">
+  ]; 
 }
 
 #endif // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_

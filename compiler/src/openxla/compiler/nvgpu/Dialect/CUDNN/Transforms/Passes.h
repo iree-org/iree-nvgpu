@@ -11,6 +11,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 
 namespace openxla::compiler::nvgpu::cudnn {
 
@@ -33,7 +34,8 @@ createConvertCudnnToRuntimePass();
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::OperationPass<mlir::func::FuncOp>>
-createNormalizeHLOConvolutionLayoutsPass();
+createNormalizeHLOConvolutionLayoutsPass(Layout tensorLayout = Layout::NHWC,
+                                         Layout kernelLayout = Layout::KHWC);
 
 }  // namespace openxla::compiler::nvgpu::cudnn
 

@@ -1,8 +1,13 @@
 // RUN: iree-compile %s --iree-plugin=openxla-cudnn                            \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
+// RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
+// RUN:     2> %t-ir                                                           \
 // RUN: | iree-run-module --module=- --device=cuda --function=predict          \
 // RUN:     --input=1x56x56x64xf32                                             \
 // RUN: FileCheck %s
+
+// RUN: cat %t-ir                                                              \
+// RUN: | FileCheck %s --check-prefix=CHECK-IR
 
 
 // batch_norm_inference
@@ -78,3 +83,19 @@ func.func @predict(%arg0: tensor<1x56x56x64xf32>) -> tensor<1x56x56x256xf32>
   %result = stablehlo.add %conv, %bcast_bias : tensor<1x56x56x256xf32>
   return %result : tensor<1x56x56x256xf32>
 }
+
+
+// Ensure that we actually lower to Cudnn.
+// CHECK-IR: IR Dump After ConvertCudnnToRuntime (openxla-nvgpu-convert-cudnn-to-runtime)
+
+// CHECK-IR: func.func @stablehlo.convolution.builder
+// CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
+// CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
+// CHECK-IR:   call @cudnn.convolution.2d
+// CHECK-IR:   call @cudnn.operation_graph.create
+
+// CHECK-IR: func.func private @_predict
+// CHECK-IR:   call @cudnn.handle
+// CHECK-IR:   call @stablehlo.convolution.builder
+// CHECK-IR:   call @cudnn.executable.create
+// CHECK-IR:   call @cudnn.execute.2

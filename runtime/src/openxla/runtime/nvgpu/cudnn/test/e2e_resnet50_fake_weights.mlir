@@ -1,8 +1,13 @@
 // RUN: iree-compile %s --iree-plugin=openxla-cudnn                            \
 // RUN:     --iree-input-type=stablehlo --iree-hal-target-backends=cuda        \
+// RUN:     --mlir-print-ir-after=openxla-nvgpu-convert-cudnn-to-runtime       \
+// RUN:     2> %t-ir                                                           \
 // RUN: | iree-run-module --module=- --device=cuda --function=predict          \
 // RUN:     --input=1x224x224x3xf32                                            \
 // RUN: FileCheck %s
+
+// RUN: cat %t-ir                                                              \
+// RUN: | FileCheck %s --check-prefix=CHECK-IR
 
 
 // CHECK: EXEC @predict
@@ -1293,3 +1298,10 @@ func.func @predict(%arg0: tensor<1x224x224x3xf32>) -> tensor<1x1000xf32> attribu
   %943 = stablehlo.divide %940, %942 : tensor<1x1000xf32>
   return %943 : tensor<1x1000xf32>
 }
+
+
+// Ensure that we actually lower to Cudnn.
+// CHECK-IR: IR Dump After ConvertCudnnToRuntime (openxla-nvgpu-convert-cudnn-to-runtime)
+
+// CHECK-IR-COUNT-53: @stablehlo.convolution{{[_0-9]*}}.builder
+// CHECK-IR-COUNT-53: @cudnn.execute.2

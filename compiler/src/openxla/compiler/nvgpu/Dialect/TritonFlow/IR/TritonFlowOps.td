@@ -4,8 +4,8 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#ifndef TRITON_OPS
-#define TRITON_OPS
+#ifndef TRITONFLOW_OPS
+#define TRITONFLOW_OPS
 
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -107,8 +107,52 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
 }
 
 //===----------------------------------------------------------------------===//
+// triton.dispatch operation
+//===----------------------------------------------------------------------===//
+
+// TODO(ezhulenev): Add support for dynamic shapes, so that we can eventually
+// lower to `flow.dispatch` with dynamic shapes.
+
+// TODO(ezhulenev): Do we need a function to convert workload into a 3D
+// workgroup (grid) similar to `flow.dispatch`? Current assumption is that
+// the end user provides grid dimension as a part of `triton.call`. We need to
+// revisit it later once we have more clear requirements.
+
+def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+]> {
+  let summary = "a dispatch of Triton executable across a grid";
+
+  let description = [{
+    Dispatches Triton executable across a grid.
+  }];
+
+  let arguments = (ins
+    Variadic<Index>:$grid,
+    SymbolRefAttr:$entry_point,
+    Variadic<AnyType>:$arguments
+  );
+
+  let results = (outs
+    Variadic<AnyType>:$results
+  );
+
+  let assemblyFormat = [{
+    $entry_point
+      `[` $grid `]` ``
+      `(` $arguments `)`
+       attr-dict `:`
+       functional-type($arguments, $results)
+  }];
+}
+
+//===----------------------------------------------------------------------===//
 // triton.call operation
 //===----------------------------------------------------------------------===//
+
+// TODO(ezhulenev): Add support for dynamic shapes, so that we can eventually
+// lower to `flow.dispatch` with dynamic shapes.
 
 def TritonFlow_CallOp : TritonFlow_Op<"call", [
     AttrSizedOperandSegments,
@@ -121,8 +165,8 @@ def TritonFlow_CallOp : TritonFlow_Op<"call", [
   }];
 
   let arguments = (ins
-    Variadic<TritonFlow_Dim>:$grid,
-    TritonFlow_FuncRefAttr:$callee,
+    Variadic<Index>:$grid,
+    FlatSymbolRefAttr:$callee,
     Variadic<AnyType>:$arguments
   );
 
@@ -139,4 +183,4 @@ def TritonFlow_CallOp : TritonFlow_Op<"call", [
   }];
 }
 
-#endif // TRITON_OPS
+#endif // TRITONFLOW_OPS

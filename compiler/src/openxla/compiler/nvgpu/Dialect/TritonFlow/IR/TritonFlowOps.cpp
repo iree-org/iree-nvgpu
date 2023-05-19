@@ -29,11 +29,9 @@ using namespace mlir::iree_compiler;
 
 LogicalResult ExecutableOp::verify() {
   auto innerModules = getBlock().getOps<ModuleOp>();
-
   if (llvm::count_if(innerModules, [](ModuleOp) { return true; }) != 1)
     return emitOpError()
            << "expected exactly one inner builtin.module operation";
-
   return success();
 }
 
@@ -44,9 +42,25 @@ LogicalResult ExecutableOp::verify() {
 LogicalResult ExecutableExportOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
   auto innerModule = getParentOp<ExecutableOp>().getInnerModule();
-  if (!symbolTable.lookupNearestSymbolFrom(innerModule, getFunctionRefAttr())) {
-    return emitOpError() << "refers to an unknown Triton function";
-  }
+  if (!symbolTable.lookupNearestSymbolFrom(innerModule, getFunctionRefAttr()))
+    return emitOpError() << "refers to an unknown Triton function: "
+                         << getFunctionRefAttr();
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
+// triton.dispatch operation
+//===----------------------------------------------------------------------===//
+
+LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
+  auto exportOp = symbolTable.lookupNearestSymbolFrom<ExecutableExportOp>(
+      getOperation(), getEntryPoint());
+  if (!exportOp)
+    return emitOpError() << "refers to an unknown Triton entry point: "
+                         << getEntryPoint();
+  // TODO(ezhulenev): Verify that the target function has matching operands. The
+  // tricky part is that the target function can be in Triton dialect, or might
+  // be lowered to LLVM, and not clear if we should verify both.
   return success();
 }
 
@@ -56,7 +70,8 @@ LogicalResult ExecutableExportOp::verifySymbolUses(
 
 LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()))
-    return emitOpError() << "refers to an unknown Triton callee";
+    return emitOpError() << "refers to an unknown Triton function: "
+                         << getCalleeAttr();
   return success();
 }
 

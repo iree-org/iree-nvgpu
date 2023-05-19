@@ -15,7 +15,7 @@ triton.executable @foo {
 // -----
 
 triton.executable @foo {
-  // expected-error @+1 {{op refers to an unknown Triton function}}
+  // expected-error @+1 {{op refers to an unknown Triton function: @bar}}
   triton.executable.export @bar
   builtin.module {}
 }
@@ -23,7 +23,15 @@ triton.executable @foo {
 // -----
 
 func.func @main(%arg0: index) {
-  // expected-error @+1 {{op refers to an unknown Triton callee}}
+  // expected-error @+1 {{op refers to an unknown Triton entry point: @foo}}
+  triton.dispatch @foo[%arg0]() : () -> ()
+  return
+}
+
+// -----
+
+func.func @main(%arg0: index) {
+  // expected-error @+1 {{op refers to an unknown Triton function: @foo}}
   triton.call @foo[%arg0]() : () -> ()
   return
 }

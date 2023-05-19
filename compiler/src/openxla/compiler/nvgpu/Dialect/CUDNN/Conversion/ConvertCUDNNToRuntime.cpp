@@ -402,7 +402,7 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
     for (auto [index, arg] : llvm::enumerate(op.getArguments())) {
       auto name = llvm::formatv("{0}.arg.{1}", op.getCallee(), index);
       args.push_back(b.create<IREE::HAL::TensorExportOp>(
-          bufferView, arg, StringAttr::get(ctx, name)));
+          bufferView, arg, TypeAttr::get(arg.getType()), StringAttr::get(ctx, name)));
     }
 
     // Call execute function with executable and buffer arguments.
@@ -413,7 +413,7 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
 
     // Import HAL buffers view back as tensors.
     rewriter.replaceOpWithNewOp<IREE::HAL::TensorImportOp>(
-        op, op->getResult(0).getType(), executed->getResult(0),
+        op, op->getResult(0).getType(), executed->getResult(0), TypeAttr::get(op->getResult(0).getType()), 
         StringAttr::get(ctx, op.getCallee() + ".result"));
 
     return success();

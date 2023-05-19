@@ -23,6 +23,25 @@ namespace openxla::compiler::nvgpu::tritonflow {
 using namespace mlir;
 using namespace mlir::iree_compiler;
 
+// Verifies that |dynamicDims| contains the appropriate number of dims for all
+// of the dynamic dimensions in |values|.
+static LogicalResult verifyOpDynamicDims(Operation *op, ValueRange values,
+                                         ValueRange dynamicDims) {
+  unsigned requiredCount = 0;
+  for (auto value : values) {
+    if (auto shapedType = value.getType().dyn_cast<ShapedType>()) {
+      requiredCount += shapedType.getNumDynamicDims();
+    }
+  }
+  if (dynamicDims.size() != requiredCount) {
+    return op->emitOpError()
+           << "value set has " << requiredCount
+           << " dynamic dimensions but only " << dynamicDims.size()
+           << " dimension values are attached";
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // triton.executable operation
 //===----------------------------------------------------------------------===//
@@ -64,6 +83,28 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   return success();
 }
 
+std::pair<unsigned, unsigned> DispatchOp::getTiedOperandsIndexAndLength() {
+  return getODSOperandIndexAndLength(1);  // $arguments
+}
+
+ValueRange DispatchOp::getOperandDynamicDims(unsigned idx) {
+  return IREE::Util::findVariadicDynamicDims(idx - getGrid().size(),
+                                             getArguments(), getArgumentDims());
+}
+ValueRange DispatchOp::getResultDynamicDims(unsigned idx) {
+  return IREE::Util::findVariadicDynamicDims(idx, getResults(),
+                                             getResultDims());
+}
+
+LogicalResult DispatchOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyOpDynamicDims(op, getArguments(), getArgumentDims())) ||
+      failed(verifyOpDynamicDims(op, getResults(), getResultDims()))) {
+    return failure();
+  }
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // triton.call operation
 //===----------------------------------------------------------------------===//
@@ -72,6 +113,28 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()))
     return emitOpError() << "refers to an unknown Triton function: "
                          << getCalleeAttr();
+  return success();
+}
+
+std::pair<unsigned, unsigned> CallOp::getTiedOperandsIndexAndLength() {
+  return getODSOperandIndexAndLength(1);  // $arguments
+}
+
+ValueRange CallOp::getOperandDynamicDims(unsigned idx) {
+  return IREE::Util::findVariadicDynamicDims(idx - getGrid().size(),
+                                             getArguments(), getArgumentDims());
+}
+ValueRange CallOp::getResultDynamicDims(unsigned idx) {
+  return IREE::Util::findVariadicDynamicDims(idx, getResults(),
+                                             getResultDims());
+}
+
+LogicalResult DispatchOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyOpDynamicDims(op, getArguments(), getArgumentDims())) ||
+      failed(verifyOpDynamicDims(op, getResults(), getResultDims()))) {
+    return failure();
+  }
   return success();
 }
 

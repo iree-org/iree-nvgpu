@@ -8,17 +8,18 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "openxla/compiler/nvgpu/Conversion/ConvertHLOToCUDNN.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
-#include "openxla/compiler/nvgpu/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
 #include "stablehlo/dialect/StablehloOps.h"
-
-#define GEN_PASS_DEF_NORMALIZEHLOCONVOLUTIONLAYOUTSPASS
-#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
 
 using namespace mlir;
 
 namespace openxla::compiler::nvgpu::cudnn {
 
 namespace {
+
+#define GEN_PASS_DECL_NORMALIZEHLOCONVOLUTIONLAYOUTSPASS
+#define GEN_PASS_DEF_NORMALIZEHLOCONVOLUTIONLAYOUTSPASS
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h.inc"
 
 struct NormalizeConvolutionLayoutPattern
     : public OpRewritePattern<stablehlo::ConvolutionOp> {
@@ -31,6 +32,7 @@ struct NormalizeConvolutionLayoutPattern
   LogicalResult matchAndRewrite(stablehlo::ConvolutionOp op,
                                 PatternRewriter& rewriter) const override {
     auto opDims = op.getDimensionNumbers();
+    auto inputSpatialDimensions = opDims.getInputSpatialDimensions();
 
     // For now, only NHWC tensor and KCHW kernel layout are supported. The
     // convolution must be of rank 4.
@@ -38,33 +40,47 @@ struct NormalizeConvolutionLayoutPattern
       return rewriter.notifyMatchFailure(
           op, "Only NHWC tensor layout is implemented");
     }
-    if (kernelLayout != Layout::KCHW) {
+    if (kernelLayout != Layout::KCHW && kernelLayout != Layout::KHWC) {
       return rewriter.notifyMatchFailure(
-          op, "Only KCHW kernel layout is implemented");
+          op, "Only KCHW and KHWC kernel layout is implemented");
     }
-    if (opDims.getInputSpatialDimensions().size() != 2) {
+    if (inputSpatialDimensions.size() != 2) {
       return rewriter.notifyMatchFailure(op,
                                          "Expect exactly 2 spatial dimensions");
     }
 
     // Determine tensor argument permutation.
     SmallVector<int64_t> lhsPermutation(4, -1);
-    auto inputSpatialDimensions = opDims.getInputSpatialDimensions();
+    assert(tensorLayout == Layout::NHWC);
     lhsPermutation[0] = opDims.getInputBatchDimension();
     lhsPermutation[1] = inputSpatialDimensions[0];
     lhsPermutation[2] = inputSpatialDimensions[1];
     lhsPermutation[3] = opDims.getInputFeatureDimension();
 
     // Determine kernel argument permutation.
-    SmallVector<int64_t> rhsPermutation(4, -1);
+    SmallVector<int64_t> rhsPermutation;
+    int64_t newKernelInputFeatureDimension, newKernelOutputFeatureDimension;
+    SmallVector<int64_t> newKernelSpatialDimensions;
     auto kernelSpatialDimensions = opDims.getKernelSpatialDimensions();
-    rhsPermutation[0] = opDims.getKernelOutputFeatureDimension();
-    rhsPermutation[1] = opDims.getKernelInputFeatureDimension();
-    rhsPermutation[2] = kernelSpatialDimensions[0];
-    rhsPermutation[3] = kernelSpatialDimensions[1];
+    if (kernelLayout == Layout::KCHW) {
+      rhsPermutation = {opDims.getKernelOutputFeatureDimension(),
+                        opDims.getKernelInputFeatureDimension(),
+                        kernelSpatialDimensions[0], kernelSpatialDimensions[1]};
+      newKernelInputFeatureDimension = 1;
+      newKernelOutputFeatureDimension = 0;
+      newKernelSpatialDimensions = {2, 3};
+    } else if (kernelLayout == Layout::KHWC) {
+      rhsPermutation = {opDims.getKernelOutputFeatureDimension(),
+                        kernelSpatialDimensions[0], kernelSpatialDimensions[1],
+                        opDims.getKernelInputFeatureDimension()};
+      newKernelInputFeatureDimension = 3;
+      newKernelOutputFeatureDimension = 0;
+      newKernelSpatialDimensions = {1, 2};
+    }
 
     // Determine result permutation.
     SmallVector<int64_t> resultPermutation(4, -1);
+    assert(tensorLayout == Layout::NHWC);
     auto outputSpatialDimensions = opDims.getOutputSpatialDimensions();
     resultPermutation[opDims.getOutputBatchDimension()] = 0;
     resultPermutation[outputSpatialDimensions[0]] = 1;
@@ -106,17 +122,14 @@ struct NormalizeConvolutionLayoutPattern
         RankedTensorType::get(newShape, resultTy.getElementType());
 
     // Recreate convolution op.
+    int64_t newIOBatchDimension = 0;
+    int64_t newIOFeatureDimension = 3;
+    SmallVector<int64_t> newIOSpatialDimensions = {1, 2};
     auto newDimsAttr = mlir::stablehlo::ConvDimensionNumbersAttr::get(
-        op.getContext(),
-        /*inputBatchDimension=*/0,
-        /*inputFeatureDimension=*/3,
-        /*inputSpatialDimensions=*/{1, 2},
-        /*kernelInputFeatureDimension=*/1,
-        /*kernelOutputFeatureDimension=*/0,
-        /*kernelSpatialDimensions=*/{2, 3},
-        /*outputBatchDimension=*/0,
-        /*outputFeatureDimension=*/3,
-        /*outputSpatialDimension=*/{1, 2});
+        op.getContext(), newIOBatchDimension, newIOFeatureDimension,
+        newIOSpatialDimensions, newKernelInputFeatureDimension,
+        newKernelOutputFeatureDimension, newKernelSpatialDimensions,
+        newIOBatchDimension, newIOFeatureDimension, newIOSpatialDimensions);
     auto newOp = rewriter.create<stablehlo::ConvolutionOp>(
         loc, newResultTy, lhs, rhs, op.getWindowStridesAttr(),
         op.getPaddingAttr(), op.getLhsDilationAttr(), op.getRhsDilationAttr(),
@@ -172,16 +185,42 @@ LogicalResult composeTranspose(stablehlo::TransposeOp op,
 }
 
 class NormalizeHLOConvolutionLayoutsPass
-    : public ::impl::NormalizeHLOConvolutionLayoutsPassBase<
+    : public impl::NormalizeHLOConvolutionLayoutsPassBase<
           NormalizeHLOConvolutionLayoutsPass> {
  public:
+  NormalizeHLOConvolutionLayoutsPass() = default;
+  explicit NormalizeHLOConvolutionLayoutsPass(Layout tensorLayout,
+                                              Layout kernelLayout)
+      : tensorLayout(tensorLayout), kernelLayout(kernelLayout) {}
+
   void runOnOperation() override {
     MLIRContext* ctx = &getContext();
 
+    // Parse layout options if needed.
+    if (!tensorLayoutOption.empty()) {
+      if (tensorLayoutOption == "NHWC")
+        tensorLayout = Layout::NHWC;
+      else if (tensorLayoutOption == "NCHW")
+        tensorLayout = Layout::NCHW;
+      else
+        return signalPassFailure();
+    }
+    if (!kernelLayoutOption.empty()) {
+      if (kernelLayoutOption == "KHWC")
+        kernelLayout = Layout::KHWC;
+      else if (kernelLayoutOption == "KCHW")
+        kernelLayout = Layout::KCHW;
+      else
+        return signalPassFailure();
+    }
+
+    // Tensor and kernel layouts must be defined.
+    if (!tensorLayout || !kernelLayout) return signalPassFailure();
+
     // Populate patterns.
     RewritePatternSet patterns(ctx);
-    patterns.add<NormalizeConvolutionLayoutPattern>(
-        ctx, /*tensorLayout=*/Layout::NHWC, /*kernelLayout*/ Layout::KCHW);
+    patterns.add<NormalizeConvolutionLayoutPattern>(ctx, *tensorLayout,
+                                                    *kernelLayout);
     patterns.add(composeTranspose);
     patterns.add(eliminateIdentityTranspose);
 
@@ -190,13 +229,18 @@ class NormalizeHLOConvolutionLayoutsPass
       return signalPassFailure();
     }
   }
+
+ private:
+  std::optional<Layout> tensorLayout, kernelLayout;
 };
 
 }  // namespace
 
 std::unique_ptr<OperationPass<func::FuncOp>>
-createNormalizeHLOConvolutionLayoutsPass() {
-  return std::make_unique<NormalizeHLOConvolutionLayoutsPass>();
+createNormalizeHLOConvolutionLayoutsPass(Layout tensorLayout,
+                                         Layout kernelLayout) {
+  return std::make_unique<NormalizeHLOConvolutionLayoutsPass>(tensorLayout,
+                                                              kernelLayout);
 }
 
 }  // namespace openxla::compiler::nvgpu::cudnn

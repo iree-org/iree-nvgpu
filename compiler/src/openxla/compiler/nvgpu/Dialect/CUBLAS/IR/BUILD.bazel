@@ -1,0 +1,141 @@
+# Copyright 2023 The OpenXLA Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_td_library(
+    name = "td_files",
+    srcs = enforce_glob(
+        [
+            "CUBLASDialect.td",
+            "CUBLASOps.td",
+            "CUBLASTypes.td",
+        ],
+        include = ["*.td"],
+    ),
+    deps = [
+        "@llvm-project//mlir:OpBaseTdFiles",
+    ],
+)
+
+cc_library(
+    name = "IR",
+    srcs = [
+        "CUBLASDialect.cpp",
+        "CUBLASOps.cpp",
+        "CUBLASTypes.cpp",
+    ],
+    hdrs = [
+        "CUBLASDialect.h",
+        "CUBLASOps.h",
+        "CUBLASTypes.h",
+    ],
+    textual_hdrs = [
+        "CUBLASDialect.h.inc",
+        "CUBLASDialect.cpp.inc",
+        "CUBLASOps.h.inc",
+        "CUBLASOps.cpp.inc",
+        "CUBLASTypes.h.inc",
+        "CUBLASTypes.cpp.inc",
+    ],
+    deps = [
+        ":CUBLASEnumsGen",
+        ":CUBLASOpsGen",
+        ":CUBLASTypesGen",
+        ":CUBLASAttrsGen",
+        "//compiler/src/openxla/compiler/nvgpu:defs",
+        "@iree_core//compiler/src/iree/compiler/Dialect/HAL/IR",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+iree_gentbl_cc_library(
+    name = "CUBLASOpsGen",
+    tbl_outs = [
+        (
+            [
+                "--gen-dialect-decls",
+                "--dialect=cublas",
+            ],
+            "CUBLASDialect.h.inc",
+        ),
+        (
+            [
+                "--gen-dialect-defs",
+                "--dialect=cublas",
+            ],
+            "CUBLASDialect.cpp.inc",
+        ),
+        (
+            ["--gen-op-decls"],
+            "CUBLASOps.h.inc",
+        ),
+        (
+            ["--gen-op-defs"],
+            "CUBLASOps.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUBLASOps.td",
+    deps = [":td_files"],
+)
+
+iree_gentbl_cc_library(
+    name = "CUBLASTypesGen",
+    tbl_outs = [
+        (
+            ["--gen-typedef-decls"],
+            "CUBLASTypes.h.inc",
+        ),
+        (
+            ["--gen-typedef-defs"],
+            "CUBLASTypes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUBLASTypes.td",
+    deps = [":td_files"],
+)
+
+iree_gentbl_cc_library(
+    name = "CUBLASEnumsGen",
+    tbl_outs = [
+        (
+            ["--gen-enum-decls"],
+            "CUBLASEnums.h.inc",
+        ),
+        (
+            ["--gen-enum-defs"],
+            "CUBLASEnums.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUBLASTypes.td",
+    deps = [":td_files"],
+)
+
+iree_gentbl_cc_library(
+    name = "CUBLASAttrsGen",
+    tbl_outs = [
+        (
+            ["--gen-attrdef-decls"],
+            "CUBLASAttrs.h.inc",
+        ),
+        (
+            ["--gen-attrdef-defs"],
+            "CUBLASAttrs.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "CUBLASTypes.td",
+    deps = [":td_files"],
+)

@@ -30,6 +30,7 @@ iree_cc_library(
     MLIRPass
     iree::compiler::Pipelines::Options
     iree::compiler::PluginAPI
+    openxla::compiler::nvgpu::Dialect::CUBLAS::IR
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
     openxla::compiler::nvgpu::Dialect::CUDNN::Transforms
     openxla::compiler::nvgpu::Dialect::TritonFlow::IR

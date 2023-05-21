@@ -67,6 +67,10 @@ def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
 
   let arguments = (ins
     Variadic<CUBLAS_Tensor2D>:$arguments,
+    OptionalAttr<CUBLAS_OperationAttr>:$transa,
+    OptionalAttr<CUBLAS_OperationAttr>:$transb,
+    OptionalAttr<CUBLAS_GemmAlgoAttr>:$algo,
+    OptionalAttr<CUBLAS_DataTypeAttr>:$computeType,
     Variadic<Index>:$argument_dims,
     Variadic<Index>:$result_dims,
     OptionalAttr<Util_TiedOpStorageAttr>:$tied_operands
@@ -78,11 +82,15 @@ def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
 
   let assemblyFormat = [{
     `(` $arguments `)`
-     attr-dict `:`
-     custom<ShapedFunctionType>(ref($arguments),
-                                type($arguments), $argument_dims,
-                                type($results), $result_dims,
-                                $tied_operands)
+      (`transa` `=` $transa^)?
+      (`transb` `=` $transb^)?
+      (`algo` `=` $algo^)?
+      (`compute_type` `=` $computeType^)?
+        attr-dict `:`
+        custom<ShapedFunctionType>(ref($arguments),
+                                   type($arguments), $argument_dims,
+                                   type($results), $result_dims,
+                                   $tied_operands)
   }];
 
   let extraClassDeclaration = [{

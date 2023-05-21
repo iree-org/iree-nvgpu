@@ -46,10 +46,10 @@ cc_library(
         "CUBLASTypes.cpp.inc",
     ],
     deps = [
+        ":CUBLASAttrsGen",
         ":CUBLASEnumsGen",
         ":CUBLASOpsGen",
         ":CUBLASTypesGen",
-        ":CUBLASAttrsGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
         "@iree_core//compiler/src/iree/compiler/Dialect/HAL/IR",
         "@llvm-project//llvm:Support",

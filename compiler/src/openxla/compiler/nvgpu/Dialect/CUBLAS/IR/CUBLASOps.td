@@ -42,4 +42,56 @@ def CUBLAS_HandleOp : CUBLAS_Op<"handle", [Pure]> {
   ];
 }
 
+//===----------------------------------------------------------------------===//
+// cublas.gemm operation
+//===----------------------------------------------------------------------===//
+
+def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<Util_TiedOpInterface>,
+  DeclareOpInterfaceMethods<Util_ShapeAwareOp, [
+    "getOperandDynamicDims", "getResultDynamicDims",
+  ]>
+]> {
+  let summary = "general matrix multiply operation";
+
+  let description = [{
+    General matrix multiplication operation targeting `cublasGemmEx` cuBLAS API.
+  }];
+
+  // TODO(ezhulenev): Instead of variadic arguments and result we should be able
+  // to specify separate arguments for `a`, `b` and `c`, but it requires
+  // updating `Util_TiedOpInterface` to work with non-variadic arguments and
+  // results. Currently we use verifier to check that we have the right number
+  // of arguments and results.
+
+  let arguments = (ins
+    Variadic<CUBLAS_Tensor2D>:$arguments,
+    Variadic<Index>:$argument_dims,
+    Variadic<Index>:$result_dims,
+    OptionalAttr<Util_TiedOpStorageAttr>:$tied_operands
+  );
+
+  let results = (outs
+    Variadic<CUBLAS_Tensor2D>:$results
+  );
+
+  let assemblyFormat = [{
+    `(` $arguments `)`
+     attr-dict `:`
+     custom<ShapedFunctionType>(ref($arguments),
+                                type($arguments), $argument_dims,
+                                type($results), $result_dims,
+                                $tied_operands)
+  }];
+
+  let extraClassDeclaration = [{
+    mlir::Value a() { return getOperand(0); }
+    mlir::Value b() { return getOperand(1); }
+    mlir::Value c() { return getNumOperands() >= 3 ? getOperand(2) : nullptr; }
+  }];
+
+  let hasVerifier = 1;
+}
+
 #endif // CUBLAS_OPS

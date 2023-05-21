@@ -59,8 +59,8 @@ def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
     General matrix multiplication operation targeting `cublasGemmEx` cuBLAS API.
   }];
 
-  // TODO(ezhulenev): Instead of variadic arguments and result we should be able
-  // to specify separate arguments for `a`, `b` and `c`, but it requires
+  // TODO(ezhulenev): Instead of variadic arguments and results we should be
+  // able to specify separate arguments for `a`, `b` and `c`, but it requires
   // updating `Util_TiedOpInterface` to work with non-variadic arguments and
   // results. Currently we use verifier to check that we have the right number
   // of arguments and results.
@@ -94,9 +94,11 @@ def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
   }];
 
   let extraClassDeclaration = [{
-    mlir::Value a() { return getOperand(0); }
-    mlir::Value b() { return getOperand(1); }
-    mlir::Value c() { return getNumOperands() >= 3 ? getOperand(2) : nullptr; }
+    mlir::Value getA() { return getOperand(0); }
+    mlir::Value getB() { return getOperand(1); }
+    mlir::Value getC() {
+      return getNumOperands() >= 3 ? getOperand(2) : nullptr;
+    }
   }];
 
   let hasVerifier = 1;

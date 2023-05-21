@@ -73,7 +73,7 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
 IREE_DEFINE_COMPILER_OPTION_FLAGS(TritonOptions);
 
 //===----------------------------------------------------------------------===//
-// OpenXLA compiler cuBLAS  plugin
+// OpenXLA compiler cuBLAS plugin
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -97,7 +97,7 @@ struct CublasSession : public PluginSession<CublasSession, CublasOptions> {
 IREE_DEFINE_COMPILER_OPTION_FLAGS(CublasOptions);
 
 //===----------------------------------------------------------------------===//
-// OpenXLA compiler cuDNN  plugin
+// OpenXLA compiler cuDNN plugin
 //===----------------------------------------------------------------------===//
 
 namespace {

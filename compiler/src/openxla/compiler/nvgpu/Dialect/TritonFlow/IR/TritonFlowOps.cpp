@@ -129,7 +129,7 @@ ValueRange CallOp::getResultDynamicDims(unsigned idx) {
                                              getResultDims());
 }
 
-LogicalResult DispatchOp::verify() {
+LogicalResult CallOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyOpDynamicDims(op, getArguments(), getArgumentDims())) ||
       failed(verifyOpDynamicDims(op, getResults(), getResultDims()))) {

@@ -29,3 +29,11 @@ func.func @main(%arg0: tensor<4x4xf32>, %arg1: tensor<4x4xf32>, %arg2: tensor<4x
   cublas.gemm(%arg0, %arg1, %arg2) : (tensor<4x4xf32>, tensor<4x4xf32>, tensor<4x4xf32>) -> %arg1
   return
 }
+
+// -----
+
+func.func @main(%arg0: tensor<4x4xf32>) {
+  // expected-error @+1 {{op without argument C must have beta equal 0.0}}
+  cublas.gemm(%arg0, %arg0) beta = 0.5 : (tensor<4x4xf32>, tensor<4x4xf32>) -> tensor<4x4xf32>
+  return
+}

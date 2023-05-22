@@ -75,15 +75,11 @@ def CUBLAS_DataTypeAttr :
 
 // TODO(ezhulenev): Add all supported GEMM algorithms.
 
-// I32 enum assumes that case value is uint32_t, and cublasGemmAlgo_t uses `-1`
-// for the default case. Be careful when converting to cublas enum.
-def CUBLAS_GEMMALGO_DEFAULT : I32EnumAttrCase<"DEFAULT", 0xFFFFFFFF>;
 def CUBLAS_GEMMALGO_ALGO0 : I32EnumAttrCase<"ALGO0", 0>;
 
 def CUBLAS_GemmAlgo : I32EnumAttr<"CublasGemmAlgo",
     "cuBLAS gemm algorithm",
     [
-      CUBLAS_GEMMALGO_DEFAULT,
       CUBLAS_GEMMALGO_ALGO0,
     ]> {
   let genSpecializedAttr = 0;

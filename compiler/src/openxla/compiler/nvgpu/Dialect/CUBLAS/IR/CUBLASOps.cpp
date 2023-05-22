@@ -58,6 +58,11 @@ LogicalResult GemmOp::verify() {
     return emitOpError() << "must have two or three arguments";
   }
 
+  // If we have beta != 0 then operation must have argument `C`.
+  if (getNumOperands() == 2 && !getBeta().isZero()) {
+    return emitOpError() << "without argument C must have beta equal 0.0";
+  }
+
   // Gemm always produces a single result.
   if (getNumResults() != 1) {
     return emitOpError() << "must have exactly one result";

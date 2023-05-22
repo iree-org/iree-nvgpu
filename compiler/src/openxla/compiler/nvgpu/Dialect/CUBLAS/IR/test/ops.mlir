@@ -24,12 +24,12 @@ func.func @gemm(%arg0: tensor<4x4xf32>, %arg1: tensor<4x4xf32>) {
 // -----
 
 func.func @inplace_gemm(%arg0: tensor<4x4xf32>, %arg1: tensor<4x4xf32>, %arg2: tensor<4x4xf32>) {
-  %0 = cublas.gemm(%arg0, %arg1, %arg2) : (tensor<4x4xf32>, tensor<4x4xf32>, tensor<4x4xf32>) -> %arg2
+  %0 = cublas.gemm(%arg0, %arg1, %arg2) alpha = 0.5 beta = 0.5 : (tensor<4x4xf32>, tensor<4x4xf32>, tensor<4x4xf32>) -> %arg2
   return
 }
 
 // CHECK: func @inplace_gemm(%[[ARG0:.*]]: tensor<4x4xf32>, %[[ARG1:.*]]: tensor<4x4xf32>, %[[ARG2:.*]]: tensor<4x4xf32>)
-// CHECK:   cublas.gemm(%[[ARG0]], %[[ARG1]], %[[ARG2]]) {{.*}} -> %[[ARG2]]
+// CHECK:   cublas.gemm(%[[ARG0]], %[[ARG1]], %[[ARG2]]) alpha = 5.000000e-01 beta = 5.000000e-01 {{.*}} -> %[[ARG2]]
 
 // -----
 

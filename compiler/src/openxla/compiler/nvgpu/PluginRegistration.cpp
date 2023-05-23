@@ -8,6 +8,7 @@
 #include "iree/compiler/PluginAPI/Client.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Pass/Pass.h"
+#include "openxla/compiler/nvgpu/Dialect/CUBLAS/IR/CUBLASDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
@@ -72,7 +73,31 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
 IREE_DEFINE_COMPILER_OPTION_FLAGS(TritonOptions);
 
 //===----------------------------------------------------------------------===//
-// OpenXLA compiler cuDNN  plugin
+// OpenXLA compiler cuBLAS plugin
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+using namespace ::openxla::compiler::nvgpu::cublas;
+
+struct CublasOptions {
+  void bindOptions(OptionsBinder &binder) {}
+};
+
+struct CublasSession : public PluginSession<CublasSession, CublasOptions> {
+  static void registerPasses() {}
+
+  void onRegisterDialects(DialectRegistry &registry) override {
+    registry.insert<CUBLASDialect>();
+  }
+};
+
+}  // namespace
+
+IREE_DEFINE_COMPILER_OPTION_FLAGS(CublasOptions);
+
+//===----------------------------------------------------------------------===//
+// OpenXLA compiler cuDNN plugin
 //===----------------------------------------------------------------------===//
 
 namespace {
@@ -154,6 +179,7 @@ IREE_DEFINE_COMPILER_OPTION_FLAGS(TransformPreprocessingOptions);
 
 extern "C" bool iree_register_compiler_plugin_openxla_nvgpu(
     mlir::iree_compiler::PluginRegistrar *registrar) {
+  registrar->registerPlugin<CublasSession>("openxla-cublas");
   registrar->registerPlugin<CudnnSession>("openxla-cudnn");
   registrar->registerPlugin<TritonSession>("openxla-triton");
   registrar->registerPlugin<TransformPreprocessingSession>("openxla-transform");

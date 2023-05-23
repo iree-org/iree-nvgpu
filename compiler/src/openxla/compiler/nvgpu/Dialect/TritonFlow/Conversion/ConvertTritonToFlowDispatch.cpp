@@ -188,11 +188,12 @@ static FailureOr<std::string> compileTritonFunctionToPTX(
 
 using llvm::sys::fs::TempFile;
 
-struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
+struct ConvertTritonFlowCallOp
+    : public OpConversionPattern<tritonflow::CallOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      DispatchOp op, OpAdaptor adaptor,
+      tritonflow::CallOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     MLIRContext *ctx = getContext();
 
@@ -348,7 +349,7 @@ struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
 void populateTritonToFlowDispatchPatterns(TypeConverter &typeConverter,
                                           RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
-  patterns.insert<ConvertTritonFlowDispatchOp>(typeConverter, ctx);
+  patterns.insert<ConvertTritonFlowCallOp>(typeConverter, ctx);
 }
 
 }  // namespace openxla::compiler::nvgpu::tritonflow

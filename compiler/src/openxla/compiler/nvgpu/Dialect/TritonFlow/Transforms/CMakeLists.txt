@@ -40,6 +40,7 @@ iree_cc_library(
     "Passes.h"
   SRCS
     "ConvertTritonToFlowDispatch.cpp"
+    "OutlineTritonCalls.cpp"
     "Passes.cpp"
   DEPS
     ::PassHeaders

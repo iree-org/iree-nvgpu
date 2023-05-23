@@ -46,6 +46,13 @@ static LogicalResult verifyOpDynamicDims(Operation *op, ValueRange values,
 // triton.executable operation
 //===----------------------------------------------------------------------===//
 
+void ExecutableOp::build(OpBuilder &builder, OperationState &state,
+                         Twine name) {
+  ensureTerminator(*state.addRegion(), builder, state.location);
+  state.addAttribute(mlir::SymbolTable::getSymbolAttrName(),
+                     builder.getStringAttr(name));
+}
+
 LogicalResult ExecutableOp::verify() {
   auto innerModules = getBlock().getOps<ModuleOp>();
   if (llvm::count_if(innerModules, [](ModuleOp) { return true; }) != 1)
@@ -57,6 +64,13 @@ LogicalResult ExecutableOp::verify() {
 //===----------------------------------------------------------------------===//
 // triton.executable.export operation
 //===----------------------------------------------------------------------===//
+
+void ExecutableExportOp::build(OpBuilder &builder, OperationState &state,
+                               StringRef sym_name,
+                               FlatSymbolRefAttr function_ref) {
+  build(builder, state, /*sym_visibility=*/nullptr,
+        builder.getStringAttr(sym_name), function_ref);
+}
 
 LogicalResult ExecutableExportOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
@@ -70,6 +84,40 @@ LogicalResult ExecutableExportOp::verifySymbolUses(
 //===----------------------------------------------------------------------===//
 // triton.dispatch operation
 //===----------------------------------------------------------------------===//
+
+void DispatchOp::build(OpBuilder &builder, OperationState &state,
+                       ExecutableExportOp exportOp, ValueRange grid,
+                       TypeRange resultTypes, ValueRange resultDims,
+                       ValueRange operands, ValueRange operandDims,
+                       ArrayAttr tiedOperands,
+                       ArrayRef<NamedAttribute> attributes) {
+  StringRef executableOpSymName =
+      exportOp->getParentOp()
+          ->getAttrOfType<StringAttr>(SymbolTable::getSymbolAttrName())
+          .getValue();
+  state.addAttribute(
+      "entry_point",
+      SymbolRefAttr::get(builder.getContext(), executableOpSymName,
+                         {SymbolRefAttr::get(exportOp)}));
+
+  state.addOperands(grid);
+  state.addTypes(resultTypes);
+  state.addOperands(operands);
+  state.addOperands(operandDims);
+  state.addOperands(resultDims);
+  state.addAttributes(attributes);
+  state.attributes.erase(IREE::Util::TiedOpInterface::getStorageAttrName());
+  state.addAttribute(IREE::Util::TiedOpInterface::getStorageAttrName(),
+                     tiedOperands);
+  state.attributes.erase(getOperandSegmentSizeAttr());
+  state.addAttribute(getOperandSegmentSizeAttr(),
+                     builder.getDenseI32ArrayAttr({
+                         static_cast<int32_t>(grid.size()),
+                         static_cast<int32_t>(operands.size()),
+                         static_cast<int32_t>(operandDims.size()),
+                         static_cast<int32_t>(resultDims.size()),
+                     }));
+}
 
 LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   auto exportOp = symbolTable.lookupNearestSymbolFrom<ExecutableExportOp>(

@@ -21,7 +21,8 @@
 
 namespace openxla::compiler::nvgpu::tritonflow {
 
-#define GEN_PASS_CLASSES
+#define GEN_PASS_DECL_CONVERTTRITONTOFLOWDISPATCH
+#define GEN_PASS_DECL_OUTLINETRITONCALLS
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"
 
 }  // namespace openxla::compiler::nvgpu::tritonflow

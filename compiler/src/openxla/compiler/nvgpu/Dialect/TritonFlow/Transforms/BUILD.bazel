@@ -47,6 +47,7 @@ cc_library(
     name = "Transforms",
     srcs = [
         "ConvertTritonToFlowDispatch.cpp",
+        "OutlineTritonCalls.cpp",
         "Passes.cpp",
     ],
     hdrs = ["Passes.h"],

@@ -8,17 +8,17 @@
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/ConvertTritonToFlowDispatch.h"
 
-namespace detail {
+namespace impl {
 namespace {
 #define GEN_PASS_REGISTRATION
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"
 }  // namespace
-}  // namespace detail
+}  // namespace impl
 
 namespace openxla::compiler::nvgpu::tritonflow {
 using namespace mlir;
 
-void registerOpenXlaTritonPases() { ::detail::registerPasses(); }
+void registerOpenXlaTritonPases() { ::impl::registerPasses(); }
 
 void registerOpenXlaTritonPipelines() {
   PassPipelineRegistration<> mhlo(

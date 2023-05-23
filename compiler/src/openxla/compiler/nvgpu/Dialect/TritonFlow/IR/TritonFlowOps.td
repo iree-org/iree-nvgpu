@@ -49,6 +49,11 @@ def TritonFlow_ExecutableOp : TritonFlow_Op<"executable", [
     regions
   }];
 
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins "llvm::Twine":$name)>,
+  ];
+
   let extraClassDeclaration = [{
     ::mlir::Block& getBlock() { return getBody().front(); }
     ::mlir::ModuleOp getInnerModule() {
@@ -106,6 +111,12 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
     custom<SymbolAlias>($sym_name, $function_ref)
     attr-dict-with-keyword
   }];
+
+  let builders = [
+    OpBuilder<(ins
+      "llvm::StringRef":$sym_name,
+      "mlir::FlatSymbolRefAttr":$function_ref)>,
+  ];
 }
 
 //===----------------------------------------------------------------------===//
@@ -159,6 +170,27 @@ def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
                                   type($results), $result_dims,
                                   $tied_operands)
   }];
+
+  let skipDefaultBuilders = 1;
+  let builders = [
+    OpBuilder<(ins
+      "ExecutableExportOp":$entryPoint, "mlir::ValueRange":$grid,
+      "mlir::TypeRange":$resultTypes, "mlir::ValueRange":$resultDims,
+      "mlir::ValueRange":$arguments, "mlir::ValueRange":$argumentDims,
+      "mlir::ArrayAttr":$tiedOperands,
+      CArg<"llvm::ArrayRef<mlir::NamedAttribute>", "{}">:$attributes)>,
+    OpBuilder<(ins
+      "ExecutableExportOp":$entryPoint, "mlir::ValueRange":$grid,
+      "mlir::TypeRange":$resultTypes, "mlir::ValueRange":$resultDims,
+      "mlir::ValueRange":$arguments, "mlir::ValueRange":$argumentDims,
+      "llvm::ArrayRef<int64_t>":$tiedOperands,
+      CArg<"llvm::ArrayRef<mlir::NamedAttribute>", "{}">:$attributes),
+      [{
+        build($_builder, $_state, entryPoint, grid, resultTypes, resultDims,
+              arguments, argumentDims,
+              $_builder.getIndexArrayAttr(tiedOperands), attributes);
+      }]>
+  ];
 
   let hasVerifier = 1;
 }

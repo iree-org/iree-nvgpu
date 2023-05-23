@@ -14,7 +14,14 @@
 namespace openxla::compiler::nvgpu::tritonflow {
 
 //===----------------------------------------------------------------------===//
-// Conversion from Triton dialect
+// Transformations on TritonFlow dialect
+//===----------------------------------------------------------------------===//
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createOutlineTritonCallsPass();
+
+//===----------------------------------------------------------------------===//
+// Conversions from TritonFlow dialect
 //===----------------------------------------------------------------------===//
 
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>

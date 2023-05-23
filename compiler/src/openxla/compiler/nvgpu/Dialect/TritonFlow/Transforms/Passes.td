@@ -9,6 +9,27 @@ include "mlir/Pass/PassBase.td"
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSES_TD_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSES_TD_
 
+//===----------------------------------------------------------------------===//
+// Transformations on TritonFlow dialect
+//===----------------------------------------------------------------------===//
+
+def OutlineTritonCalls :
+    Pass<"openxla-nvgpu-outline-triton-calls", "mlir::ModuleOp"> {
+  let summary = "Outlines Triton calls into Triton executables";
+
+  let constructor = [{
+    openxla::compiler::nvgpu::tritonflow::createOutlineTritonCallsPass()
+  }];
+
+  let dependentDialects = [
+    "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// Conversions from TritonFlow dialect
+//===----------------------------------------------------------------------===//
+
 def ConvertTritonToFlowDispatch :
     Pass<"openxla-nvgpu-convert-triton-to-flow-dispatch", "mlir::ModuleOp"> {
   let summary = "Converts Triton dispatches to IREE Flow dispatch";

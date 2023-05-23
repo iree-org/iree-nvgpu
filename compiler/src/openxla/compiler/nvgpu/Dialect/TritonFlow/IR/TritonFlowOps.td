@@ -10,6 +10,8 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
+include "iree/compiler/Dialect/Util/IR/UtilBase.td"
+include "iree/compiler/Dialect/Util/IR/UtilInterfaces.td"
 include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.td"
 
 //===----------------------------------------------------------------------===//
@@ -121,6 +123,12 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
 def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<Util_TiedOpInterface, [
+    "getTiedOperandsIndexAndLength",
+  ]>,
+  DeclareOpInterfaceMethods<Util_ShapeAwareOp, [
+    "getOperandDynamicDims", "getResultDynamicDims",
+  ]>
 ]> {
   let summary = "a dispatch of Triton executable across a grid";
 
@@ -131,7 +139,10 @@ def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
   let arguments = (ins
     Variadic<Index>:$grid,
     SymbolRefAttr:$entry_point,
-    Variadic<AnyType>:$arguments
+    Variadic<AnyType>:$arguments,
+    Variadic<Index>:$argument_dims,
+    Variadic<Index>:$result_dims,
+    OptionalAttr<Util_TiedOpStorageAttr>:$tied_operands
   );
 
   let results = (outs
@@ -143,8 +154,13 @@ def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
       `[` $grid `]` ``
       `(` $arguments `)`
        attr-dict `:`
-       functional-type($arguments, $results)
+       custom<ShapedFunctionType>(ref($arguments),
+                                  type($arguments), $argument_dims,
+                                  type($results), $result_dims,
+                                  $tied_operands)
   }];
+
+  let hasVerifier = 1;
 }
 
 //===----------------------------------------------------------------------===//
@@ -155,8 +171,14 @@ def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
 // lower to `flow.dispatch` with dynamic shapes.
 
 def TritonFlow_CallOp : TritonFlow_Op<"call", [
-    AttrSizedOperandSegments,
-    DeclareOpInterfaceMethods<SymbolUserOpInterface>
+  AttrSizedOperandSegments,
+  DeclareOpInterfaceMethods<SymbolUserOpInterface>,
+  DeclareOpInterfaceMethods<Util_TiedOpInterface, [
+    "getTiedOperandsIndexAndLength",
+  ]>,
+  DeclareOpInterfaceMethods<Util_ShapeAwareOp, [
+    "getOperandDynamicDims", "getResultDynamicDims",
+  ]>
 ]> {
   let summary = "Triton call operation";
 
@@ -167,7 +189,10 @@ def TritonFlow_CallOp : TritonFlow_Op<"call", [
   let arguments = (ins
     Variadic<Index>:$grid,
     FlatSymbolRefAttr:$callee,
-    Variadic<AnyType>:$arguments
+    Variadic<AnyType>:$arguments,
+    Variadic<Index>:$argument_dims,
+    Variadic<Index>:$result_dims,
+    OptionalAttr<Util_TiedOpStorageAttr>:$tied_operands
   );
 
   let results = (outs
@@ -179,8 +204,13 @@ def TritonFlow_CallOp : TritonFlow_Op<"call", [
       `[` $grid `]` ``
       `(` $arguments `)`
        attr-dict `:`
-       functional-type($arguments, $results)
+       custom<ShapedFunctionType>(ref($arguments),
+                                  type($arguments), $argument_dims,
+                                  type($results), $result_dims,
+                                  $tied_operands)
   }];
+
+  let hasVerifier = 1;
 }
 
 #endif // TRITONFLOW_OPS

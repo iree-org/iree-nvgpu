@@ -263,8 +263,8 @@ struct ConvertTritonFlowCallOp
 
     rewriter.replaceOpWithNewOp<IREE::Flow::DispatchOp>(
         op, executableEntryPoint, adaptor.getGrid(), op->getResultTypes(),
-        /*resultDims=*/ValueRange(), adaptor.getArguments(),
-        /*argumentDims=*/ValueRange(), /*tiedOperands=*/ArrayRef<int64_t>());
+        adaptor.getResultDims(), adaptor.getArguments(),
+        adaptor.getArgumentDims(), adaptor.getTiedOperands().value_or(nullptr));
 
     // TODO(ezhulenev): It is not safe in general, but currently we assume that
     // we have 1-to-1 mapping between Triton dispatch and Triton function.

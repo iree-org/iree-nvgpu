@@ -15,6 +15,7 @@
 #include <optional>
 #include <string>
 
+#include "compiler/src/iree/compiler/Dialect/Flow/IR/FlowOps.h"
 #include "compiler/src/iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "compiler/src/iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "llvm/ADT/STLExtras.h"
@@ -80,7 +81,7 @@ class CudnnAPI {
 
   // Imports `@cudnn.execute` into the module.
   func::FuncOp getExecuteFunction(PatternRewriter &rewriter, ModuleOp module,
-                                  int64_t num_args);
+                                  int64_t num_args, int64_t num_rets);
 
   SymbolTable &symTable(ModuleOp module);
 
@@ -226,16 +227,21 @@ func::FuncOp CudnnAPI::getExecutableCreateFunction(PatternRewriter &rewriter,
 }
 
 func::FuncOp CudnnAPI::getExecuteFunction(PatternRewriter &rewriter,
-                                          ModuleOp module, int64_t num_args) {
+                                          ModuleOp module, int64_t num_args,
+                                          int64_t num_rets) {
   MLIRContext *ctx = module->getContext();
 
   SmallVector<Type> args = {ExecutableType::get(ctx)};
-  args.resize(args.size() + num_args, IREE::HAL::BufferViewType::get(ctx));
+  args.resize(args.size() + num_args + num_rets,
+              IREE::HAL::BufferViewType::get(ctx));
 
-  SmallVector<Type> rets = {IREE::HAL::BufferViewType::get(ctx)};
-  auto functionType = FunctionType::get(ctx, args, rets);
+  assert(num_rets == 1 && "multiple results are not supported");
+  auto functionType = FunctionType::get(ctx, args, /*rets=*/{});
 
-  auto functionName = llvm::formatv("cudnn.execute.{0}", num_args);
+  // TODO(ezhulenev): We should pass lists of buffer views to avoid importing
+  // multiple functions for different combinations of arguments and results.
+  auto functionName =
+      llvm::formatv("cudnn.execute.{0}.{1}", num_args, num_rets);
   return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
                  functionType);
 }
@@ -406,17 +412,27 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
           StringAttr::get(ctx, name)));
     }
 
-    // Call execute function with executable and buffer arguments.
-    auto execute =
-        api->getExecuteFunction(rewriter, module, op.getArguments().size());
-    auto executed =
-        b.create<func::CallOp>(execute.getSymName(), bufferView, args);
+    // TODO(ezhulenev): We can't use `flow.tensor.empty` operation here as it
+    // doesn't guarantee a new tensor allocation. However for streamable calls
+    // we might be able to use it together with tied results, and likely get
+    // better stream level optimizations. Consider converting execute calls to
+    // streamable functions for cuDNN module.
 
-    // Import HAL buffers view back as tensors.
-    Type resultTy = op->getResult(0).getType();
-    rewriter.replaceOpWithNewOp<IREE::HAL::TensorImportOp>(
-        op, resultTy, executed->getResult(0), TypeAttr::get(resultTy),
-        StringAttr::get(ctx, op.getCallee() + ".result"));
+    // Allocate a result tensor for destination-passing style call.
+    auto resultDst = b.create<IREE::Flow::TensorAllocOp>(
+        op->getResult(0).getType(), /*result_dims=*/ValueRange());
+    auto resultName = llvm::formatv("{0}.ret.0", op.getCallee());
+    args.push_back(b.create<IREE::HAL::TensorExportOp>(
+        bufferView, resultDst, TypeAttr::get(resultDst.getType()),
+        StringAttr::get(ctx, resultName)));
+
+    // Call execute function with executable and buffer arguments.
+    auto execute = api->getExecuteFunction(
+        rewriter, module, op.getArguments().size(), op.getResults().size());
+    b.create<func::CallOp>(execute.getSymName(), TypeRange(), args);
+
+    // Forward all users to newly allocated tensor.
+    rewriter.replaceOp(op, resultDst.getResult());
 
     return success();
   }

@@ -42,6 +42,7 @@ def ConvertCudnnToRuntime :
 
   let dependentDialects = [
     "::openxla::compiler::nvgpu::cudnn::CUDNNDialect",
+    "::mlir::iree_compiler::IREE::Flow::FlowDialect",
     "::mlir::iree_compiler::IREE::HAL::HALDialect",
     "::mlir::iree_compiler::IREE::Util::UtilDialect",
     "::mlir::func::FuncDialect",
@@ -62,7 +63,7 @@ def NormalizeHLOConvolutionLayoutsPass : Pass<
         "Desired tensor layout for convolution inputs and outputs.">,
     Option<"kernelLayoutOption", "kernel-layout", "std::string", /*default=*/"",
         "Desired kernel layout for convolutions.">
-  ]; 
+  ];
 }
 
 #endif // OPENXLA_COMPILER_NVGPU_DIALECT_CUDNN_TRANSFORMS_PASSES_TD_

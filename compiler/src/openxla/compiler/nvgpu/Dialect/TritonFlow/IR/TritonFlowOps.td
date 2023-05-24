@@ -14,6 +14,20 @@ include "iree/compiler/Dialect/Util/IR/UtilBase.td"
 include "iree/compiler/Dialect/Util/IR/UtilInterfaces.td"
 include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.td"
 
+
+// TODO(ezhulenev): Add support for all element types.
+def TritonFlow_TensorType : RankedTensorOf<[F32, I32]>;
+
+// Currently we are limited by the IREE ABI and have to create a pipeline layout
+// compatible with a Triton entry point function.
+def TritonFlow_ArgType : AnyTypeOf<[I32, TritonFlow_TensorType],
+                                   "Triton argument type">;
+
+// Triton calls/dispatches can only "return" results via destination-passing
+// style output buffers.
+def TritonFlow_RetType : AnyTypeOf<[TritonFlow_TensorType],
+                                   "Triton result type">;
+
 //===----------------------------------------------------------------------===//
 // triton.executable operation
 //===----------------------------------------------------------------------===//
@@ -199,9 +213,6 @@ def TritonFlow_DispatchOp : TritonFlow_Op<"dispatch", [
 // triton.call operation
 //===----------------------------------------------------------------------===//
 
-// TODO(ezhulenev): Add support for dynamic shapes, so that we can eventually
-// lower to `flow.dispatch` with dynamic shapes.
-
 def TritonFlow_CallOp : TritonFlow_Op<"call", [
   AttrSizedOperandSegments,
   DeclareOpInterfaceMethods<SymbolUserOpInterface>,
@@ -221,14 +232,14 @@ def TritonFlow_CallOp : TritonFlow_Op<"call", [
   let arguments = (ins
     Variadic<Index>:$grid,
     FlatSymbolRefAttr:$callee,
-    Variadic<AnyType>:$arguments,
+    Variadic<TritonFlow_ArgType>:$arguments,
     Variadic<Index>:$argument_dims,
     Variadic<Index>:$result_dims,
     OptionalAttr<Util_TiedOpStorageAttr>:$tied_operands
   );
 
   let results = (outs
-    Variadic<AnyType>:$results
+    Variadic<TritonFlow_RetType>:$results
   );
 
   let assemblyFormat = [{

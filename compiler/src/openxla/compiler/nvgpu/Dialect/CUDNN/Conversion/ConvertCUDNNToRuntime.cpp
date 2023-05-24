@@ -231,12 +231,11 @@ func::FuncOp CudnnAPI::getExecuteFunction(PatternRewriter &rewriter,
                                           int64_t num_rets) {
   MLIRContext *ctx = module->getContext();
 
-  SmallVector<Type> args = {ExecutableType::get(ctx)};
-  args.resize(args.size() + num_args + num_rets,
-              IREE::HAL::BufferViewType::get(ctx));
+  SmallVector<Type> inputs = {ExecutableType::get(ctx)};
+  inputs.resize(inputs.size() + num_args + num_rets,
+                IREE::HAL::BufferViewType::get(ctx));
 
-  assert(num_rets == 1 && "multiple results are not supported");
-  auto functionType = FunctionType::get(ctx, args, /*rets=*/{});
+  auto functionType = FunctionType::get(ctx, inputs, /*results=*/{});
 
   // TODO(ezhulenev): We should pass lists of buffer views to avoid importing
   // multiple functions for different combinations of arguments and results.

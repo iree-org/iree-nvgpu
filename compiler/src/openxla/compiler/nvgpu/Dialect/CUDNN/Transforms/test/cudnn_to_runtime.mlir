@@ -197,13 +197,14 @@ func.func @main(%handle: !cudnn.handle,
 // CHECK:   %[[G:.*]] = call @graph.builder(%[[HANDLE]])
 // CHECK:   %[[E:.*]] = call @cudnn.executable.create(%[[G]])
 // CHECK:   %[[BUF0:.*]] = hal.tensor.export %[[ARG]] "graph.arg.0"
-// CHECK:   %[[BUF1:.*]] = call @cudnn.execute.1(%[[E]], %[[BUF0]])
-// CHECK:   %[[RES:.*]] = hal.tensor.import %[[BUF1]] "graph.result"
-// CHECK:   return %[[RES]] : tensor<1x4x8xf32>
+// CHECK:   %[[ALLOC:.*]] = flow.tensor.alloc : tensor<1x4x8xf32>
+// CHECK:   %[[RET0:.*]] = hal.tensor.export %[[ALLOC]] "graph.ret.0"
+// CHECK:   call @cudnn.execute.1.1(%[[E]], %[[BUF0]], %[[RET0]])
+// CHECK:   return %[[ALLOC]] : tensor<1x4x8xf32>
 // CHECK: }
 
 // CHECK: @cudnn.executable.create(!cudnn.operation_graph) -> !cudnn.executable
-// CHECK: @cudnn.execute.1(!cudnn.executable, !hal.buffer_view) -> !hal.buffer_view
+// CHECK: @cudnn.execute.1.1(!cudnn.executable, !hal.buffer_view, !hal.buffer_view)
 
 // -----
 // Check that cuDNN graphs that use global handle can be instantiated into
@@ -237,7 +238,7 @@ func.func @main(%arg: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
 
 // CHECK: func.func @main(%[[ARG:.*]]: tensor<1x4x8xf32>) -> tensor<1x4x8xf32> {
 // CHECK:   %[[LOADED:.*]] = util.global.load @graph.executable
-// CHECK:   call @cudnn.execute.1(%[[LOADED]]
+// CHECK:   call @cudnn.execute.1.1(%[[LOADED]]
 // CHECK: }
 
 // -----

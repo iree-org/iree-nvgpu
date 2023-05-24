@@ -186,9 +186,9 @@ class CudnnExecutable : public iree::vm::RefObject<CudnnExecutable> {
   // Executes operation graph with user provided inputs using one of the
   // available execution plans. Returns a view into allocated buffer for the
   // graph execution result.
-  iree::StatusOr<iree::vm::ref<iree_hal_buffer_view_t>> Execute(
-      iree_allocator_t host_allocator,
-      iree::span<iree_hal_buffer_view_t* const> args);
+  iree::Status Execute(iree_allocator_t host_allocator,
+                       iree::span<iree_hal_buffer_view_t* const> args,
+                       iree::span<iree_hal_buffer_view_t* const> rets);
 
   iree_hal_device_t* device() const;
   cudnnHandle_t handle() const;

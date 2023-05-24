@@ -267,11 +267,12 @@ static size_t GetHostSize(cudnnDataType_t dtype) {
   }
 }
 
-StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
-    iree_allocator_t host_allocator, span<iree_hal_buffer_view_t* const> args) {
+Status CudnnExecutable::Execute(iree_allocator_t host_allocator,
+                                span<iree_hal_buffer_view_t* const> args,
+                                span<iree_hal_buffer_view_t* const> rets) {
   ScopedCudnnStubs stubs(syms_);
 
-  // Check that we have a buffer for every argument.
+  // Check that we have a buffer for each argument.
   if (args.size() != graph().args().size()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
                             "number of buffer arguments %ld doesn't match the "
@@ -279,30 +280,17 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
                             args.size(), graph().args().size());
   }
 
-  // Currently we only support cuDNN graphs with a single result.
-  if (graph().rets().size() != 1) {
+  // Check that we have a buffer for each result.
+  if (rets.size() != graph().rets().size()) {
     return iree_make_status(IREE_STATUS_INVALID_ARGUMENT,
-                            "unsupported number of cuDNN graph results %ld, "
-                            "expected a cuDNN graph with single result",
-                            graph().rets().size());
+                            "number of result buffers %ld doesn't match the "
+                            "number of cuDNN graph results %ld",
+                            rets.size(), graph().rets().size());
   }
 
-  const cudnn_frontend::Tensor& result = graph().ret(0)->tensor();
   const cudnn_frontend::ExecutionPlan& plan = plans_[0];
 
   iree_hal_device_t* device = graph().device();
-
-  // TODO(ezhulenev): We should not be always allocating host visible memory,
-  // for the most use cases device only memory should be more efficient. Revisit
-  // memory allocation once we have a new CUDA HAL implementation.
-  iree_hal_buffer_params_t result_buffer_params = {
-      /*.usage=*/IREE_HAL_BUFFER_USAGE_DEFAULT | IREE_HAL_BUFFER_USAGE_MAPPING,
-      /*.access=*/IREE_HAL_MEMORY_ACCESS_ALL,
-      /*.type=*/IREE_HAL_MEMORY_TYPE_OPTIMAL_FOR_DEVICE |
-          IREE_HAL_MEMORY_TYPE_HOST_VISIBLE,
-      /*.queue_affinity=*/IREE_HAL_QUEUE_AFFINITY_ANY,
-      /*.min_alignment=*/static_cast<iree_host_size_t>(result.getAlignment()),
-  };
 
   // It is always safe to allocate workspace buffer as device local.
   iree_hal_buffer_params_t workspace_buffer_params = {
@@ -314,19 +302,8 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
   };
 
   // TODO(ezhulenev): We should be using semaphores to enforce ordering of
-  // cuDNN kernel launches and result allocation. We skip it today, because
-  // we know that we use cudaMallocManaged and a NULL CUDA stream.
-
-  int64_t result_byte_length =
-      result.getPackedElementCount() *
-      GetHostSize(static_cast<cudnnDataType_t>(result.getDataType()));
-
-  vm::ref<iree_hal_buffer_t> result_buffer;
-  IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
-      device, IREE_HAL_QUEUE_AFFINITY_ANY, iree_hal_semaphore_list_empty(),
-      iree_hal_semaphore_list_empty(), IREE_HAL_ALLOCATOR_POOL_DEFAULT,
-      result_buffer_params, result_byte_length, &result_buffer));
-
+  // cuDNN kernel launches and workspace buffer allocation. We skip it today,
+  // because we know that we use a NULL CUDA stream and a trivial CUDA HAL.
   vm::ref<iree_hal_buffer_t> workspace_buffer;
   if (plan.getWorkspaceSize() > 0) {
     IREE_RETURN_IF_ERROR(iree_hal_device_queue_alloca(
@@ -335,17 +312,8 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
         workspace_buffer_params, plan.getWorkspaceSize(), &workspace_buffer));
   }
 
-  // Wrap the result buffer into a buffer view that provides the metadata for
-  // runtime verification.
-  vm::ref<iree_hal_buffer_view_t> result_view;
-  std::vector<iree_host_size_t> result_shape = GetResultShape(result);
-  IREE_RETURN_IF_ERROR(iree_hal_buffer_view_create(
-      result_buffer.get(), result_shape.size(), result_shape.data(),
-      IREE_HAL_ELEMENT_TYPE_FLOAT_32, IREE_HAL_ENCODING_TYPE_DENSE_ROW_MAJOR,
-      host_allocator, &result_view));
-
   // Prepare data for executing cuDNN graphs.
-  auto ptrs = GetDevicePointers(args, {result_view.get()});
+  auto ptrs = GetDevicePointers(args, rets);
   static_assert(sizeof(CUdeviceptr) == sizeof(void*));
 
   // Maybe pass a workspace pointer to the cuDNN backend execute.
@@ -391,7 +359,7 @@ StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnExecutable::Execute(
   CUDA_RETURN_IF_ERROR(cuda_syms_, cuStreamSynchronize(NULL),
                        "cuStreamSynchronize");
 
-  return result_view;
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//

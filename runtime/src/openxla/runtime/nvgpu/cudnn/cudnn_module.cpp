@@ -11,6 +11,7 @@
 #include <cstring>
 #include <memory>
 
+#include "iree/base/status.h"
 #include "iree/hal/drivers/cuda/dynamic_symbols.h"
 #include "iree/modules/hal/types.h"
 #include "iree/vm/dynamic/api.h"
@@ -91,10 +92,10 @@ class CudnnModuleState {
 
   // Executes cuDNN executable with given HAL buffer view inputs and returns
   // result as a HAL buffer view.
-  template <size_t n>
-  StatusOr<vm::ref<iree_hal_buffer_view_t>> Execute(
-      const vm::ref<CudnnExecutable> executable,
-      std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs);
+  template <size_t num_args, size_t num_rets>
+  Status Execute(const vm::ref<CudnnExecutable> executable,
+                 std::array<vm::ref<iree_hal_buffer_view_t>, num_args> args,
+                 std::array<vm::ref<iree_hal_buffer_view_t>, num_rets> rets);
 
   // Creates a pointwise relu operation and returns result tensor.
   StatusOr<vm::ref<CudnnTensor>> Relu(const vm::ref<CudnnTensor> input,
@@ -249,17 +250,21 @@ StatusOr<vm::ref<CudnnExecutable>> CudnnModuleState::Executable(
   return CreateExecutable(cuda_syms_, syms_, *graph);
 }
 
-template <size_t n>
-StatusOr<vm::ref<iree_hal_buffer_view_t>> CudnnModuleState::Execute(
+template <size_t num_arg, size_t num_rets>
+Status CudnnModuleState::Execute(
     const vm::ref<CudnnExecutable> executable,
-    std::array<vm::ref<iree_hal_buffer_view_t>, n> inputs) {
-  std::array<iree_hal_buffer_view_t*, n> args;
-  for (size_t i = 0; i < n; ++i) args[i] = inputs[i].get();
+    std::array<vm::ref<iree_hal_buffer_view_t>, num_arg> inputs,
+    std::array<vm::ref<iree_hal_buffer_view_t>, num_rets> results) {
+  std::array<iree_hal_buffer_view_t*, num_arg> args_view;
+  for (size_t i = 0; i < num_arg; ++i) args_view[i] = inputs[i].get();
 
-  IREE_ASSIGN_OR_RETURN(vm::ref<iree_hal_buffer_view_t> result,
-                        executable->Execute(host_allocator_, args));
+  std::array<iree_hal_buffer_view_t*, num_rets> rets_view;
+  for (size_t i = 0; i < num_rets; ++i) rets_view[i] = results[i].get();
 
-  return result;
+  IREE_RETURN_IF_ERROR(
+      executable->Execute(host_allocator_, args_view, rets_view));
+
+  return iree_ok_status();
 }
 
 //===----------------------------------------------------------------------===//
@@ -285,15 +290,18 @@ static const vm::NativeFunction<State> kCudnnModuleFunctions[] = {
     // cuDNN executable construction
     MakeNativeFunction("executable.create", &State::Executable),
 
+    // TODO(ezhulenev): Add support for lists of buffers to export a single
+    // execute function from cuDNN module.
+
     // Execute cuDNN executable with buffer inputs
-    MakeNativeFunction("execute.1", &State::Execute<1>),
-    MakeNativeFunction("execute.2", &State::Execute<2>),
-    MakeNativeFunction("execute.3", &State::Execute<3>),
-    MakeNativeFunction("execute.4", &State::Execute<4>),
-    MakeNativeFunction("execute.5", &State::Execute<5>),
-    MakeNativeFunction("execute.6", &State::Execute<6>),
-    MakeNativeFunction("execute.7", &State::Execute<7>),
-    MakeNativeFunction("execute.8", &State::Execute<8>),
+    MakeNativeFunction("execute.1.1", &State::Execute<1, 1>),
+    MakeNativeFunction("execute.2.1", &State::Execute<2, 1>),
+    MakeNativeFunction("execute.3.1", &State::Execute<3, 1>),
+    MakeNativeFunction("execute.4.1", &State::Execute<4, 1>),
+    MakeNativeFunction("execute.5.1", &State::Execute<5, 1>),
+    MakeNativeFunction("execute.6.1", &State::Execute<6, 1>),
+    MakeNativeFunction("execute.7.1", &State::Execute<7, 1>),
+    MakeNativeFunction("execute.8.1", &State::Execute<8, 1>),
 
     // cuDNN pointwise unary operations
     MakeNativeFunction("sqrt", &State::PointwiseUnary<CUDNN_POINTWISE_SQRT>),

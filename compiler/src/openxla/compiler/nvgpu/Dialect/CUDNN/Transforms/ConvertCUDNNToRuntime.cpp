@@ -4,15 +4,17 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
-#include <openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/ConvertCUDNNToRuntime.h>
-#include <openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h>
-#include <openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h>
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/Conversion/ConvertCUDNNToRuntime.h"
 
+#include "iree/compiler/Dialect/Flow/IR/FlowOps.h"
+#include "iree/compiler/Dialect/HAL/IR/HALOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
+#include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/PassDetail.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
 
@@ -40,10 +42,11 @@ class ConverCudnnToRuntime
     // Ensure all cuDNN dialect operations go away.
     ConversionTarget conversionTarget(*context);
     conversionTarget.addIllegalDialect<cudnn::CUDNNDialect>();
+    conversionTarget.addLegalOp<IREE::Flow::TensorAllocOp>();
+    conversionTarget.addLegalOp<IREE::HAL::TensorExportOp>();
+    conversionTarget.addLegalDialect<IREE::Util::UtilDialect>();
     conversionTarget.addLegalDialect<func::FuncDialect>();
     conversionTarget.addLegalDialect<arith::ArithDialect>();
-    conversionTarget.addLegalDialect<IREE::HAL::HALDialect>();
-    conversionTarget.addLegalDialect<IREE::Util::UtilDialect>();
 
     RewritePatternSet patterns(&getContext());
     populateCudnnToRuntimePatterns(typeConverter, patterns);

@@ -149,7 +149,7 @@ static LogicalResult outlineToGraph(TensorValue result,
   // Replace root with cudnn.call op.
   rewriter.setInsertionPoint(root);
   auto loadedHandle = rewriter.create<IREE::Util::GlobalLoadOp>(
-      loc, rewriter.getType<HandleType>(), globalHandle.getSymNameAttr());
+      loc, handleTy, globalHandle.getSymNameAttr());
   rewriter.replaceOpWithNewOp<CallOp>(
       root, result.getType(), graph.getName(), loadedHandle,
       ArrayRef<Value>(arguments.begin(), arguments.size()));

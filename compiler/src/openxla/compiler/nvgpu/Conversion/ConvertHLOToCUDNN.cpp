@@ -32,19 +32,21 @@ using TensorValue = TypedValue<TensorType>;
 
 static CudnnTensorType getCudnnTensorType(mlir::TensorType type,
                                           Layout layout) {
-  auto shape = [&]() -> SmallVector<int64_t> {
-    auto shape = type.getShape();
-    switch (layout) {
-      case Layout::NCHW:
-      case Layout::KCHW:
-        return {shape.begin(), shape.end()};
-      case Layout::NHWC:
-      case Layout::KHWC:
-        return {shape[0], shape[3], shape[1], shape[2]};
-    }
-    return {};
-  }();
-  return CudnnTensorType::get(shape, type.getElementType(), layout);
+  auto shape = type.getShape();
+  assert(shape.size() == 4);
+  SmallVector<int64_t> newShape;
+  switch (layout) {
+    case Layout::NCHW:
+    case Layout::KCHW:
+      newShape = {shape.begin(), shape.end()};
+      break;
+    case Layout::NHWC:
+    case Layout::KHWC:
+      newShape = {shape[0], shape[3], shape[1], shape[2]};
+      break;
+  }
+  assert(newShape.size() == shape.size());
+  return CudnnTensorType::get(newShape, type.getElementType(), layout);
 }
 
 static FailureOr<Layout> getCudnnTensorLayout(int64_t batchDim,
@@ -81,6 +83,10 @@ static LogicalResult outlineToGraph(TensorValue result,
     return rewriter.notifyMatchFailure(result.getLoc(), "expected one result");
   func::FuncOp func = root->getParentOfType<func::FuncOp>();
   if (!func) return rewriter.notifyMatchFailure(root, "expected child of func");
+  ModuleOp m = func->getParentOfType<ModuleOp>();
+  if (!m)
+    return rewriter.notifyMatchFailure(root,
+                                       "expected child of func in module");
 
   // Collect the set of ops to clone into the region.
   SetVector<Operation*> ops;
@@ -98,17 +104,16 @@ static LogicalResult outlineToGraph(TensorValue result,
   }
 
   // Create the cudnn.graph op with an empty region.
-  OpBuilder::InsertionGuard guard(rewriter);
+  SymbolTable symbolTable(func->getParentOp());
   rewriter.setInsertionPoint(func);
   GraphOp graph = rewriter.create<GraphOp>(root->getLoc(), funcType,
                                            /*arg_attrs=*/ArrayAttr{},
                                            /*res_attrs=*/ArrayAttr{});
-  SymbolTable symtab(func->getParentOp());
   graph.setName(root->getName().getStringRef());
-  symtab.insert(graph);
+  symbolTable.insert(graph);
 
   // Clone ops into region.
-  rewriter.setInsertionPointToEnd(graph.addEntryBlock());
+  rewriter.setInsertionPointToStart(graph.addEntryBlock());
   IRMapping mapping;
   for (size_t index = 0; index < arguments.size(); ++index) {
     Value arg = arguments[index];
@@ -125,14 +130,29 @@ static LogicalResult outlineToGraph(TensorValue result,
       result.getLoc(), funcType.getResults(), results);
   rewriter.create<ReturnOp>(root->getLoc(), castOp.getResults());
 
+  // Create global handle before any other initialization.
+  rewriter.setInsertionPointToStart(m.getBody());
+  Location loc = root->getLoc();
+  std::string globalHandleName = (graph.getName() + ".handle").str();
+  auto handleTy = rewriter.getType<HandleType>();
+  auto globalHandle = rewriter.create<IREE::Util::GlobalOp>(
+      loc, globalHandleName, /*isMutable=*/false, handleTy);
+
+  // Create global handle initializer.
+  auto initializer = rewriter.create<IREE::Util::InitializerOp>(loc);
+  rewriter.setInsertionPointToStart(initializer.addEntryBlock());
+  auto device = rewriter.create<IREE::HAL::ExSharedDeviceOp>(loc);
+  auto handle = rewriter.create<HandleOp>(loc, device);
+  rewriter.create<IREE::Util::GlobalStoreOp>(loc, handle, globalHandle);
+  rewriter.create<IREE::Util::InitializerReturnOp>(loc);
+
   // Replace root with cudnn.call op.
   rewriter.setInsertionPoint(root);
-  auto device = rewriter.create<IREE::HAL::ExSharedDeviceOp>(root->getLoc());
-  auto handle = rewriter.create<HandleOp>(root->getLoc(), device.getResult());
+  auto loadedHandle = rewriter.create<IREE::Util::GlobalLoadOp>(
+      loc, handleTy, globalHandle.getSymNameAttr());
   rewriter.replaceOpWithNewOp<CallOp>(
-      root, result.getType(), graph.getName(), handle,
+      root, result.getType(), graph.getName(), loadedHandle,
       ArrayRef<Value>(arguments.begin(), arguments.size()));
-
   return success();
 }
 

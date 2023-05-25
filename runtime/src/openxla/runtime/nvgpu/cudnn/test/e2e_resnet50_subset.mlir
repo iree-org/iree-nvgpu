@@ -88,14 +88,21 @@ func.func @predict(%arg0: tensor<1x56x56x64xf32>) -> tensor<1x56x56x256xf32>
 // Ensure that we actually lower to Cudnn.
 // CHECK-IR: IR Dump After ConvertCudnnToRuntime (openxla-nvgpu-convert-cudnn-to-runtime)
 
+// CHECK-IR: util.initializer
+// CHECK-IR:   hal.ex.shared_device
+// CHECK-IR:   func.call @cudnn.handle
+
 // CHECK-IR: func.func @stablehlo.convolution.builder
 // CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
 // CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
 // CHECK-IR:   call @cudnn.convolution.2d
 // CHECK-IR:   call @cudnn.operation_graph.create
 
+// CHECK-IR: util.initializer
+// CHECK-IR:   func.call @stablehlo.convolution.builder
+// CHECK-IR:   func.call @cudnn.executable.create
+
 // CHECK-IR: func.func private @_predict
-// CHECK-IR:   call @cudnn.handle
-// CHECK-IR:   call @stablehlo.convolution.builder
-// CHECK-IR:   call @cudnn.executable.create
+// CHECK-IR:   util.global.load
+// CHECK-IR:   util.global.load
 // CHECK-IR:   call @cudnn.execute.2

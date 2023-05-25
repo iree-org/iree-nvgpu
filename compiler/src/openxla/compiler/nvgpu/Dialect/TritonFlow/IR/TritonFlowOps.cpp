@@ -127,7 +127,7 @@ static LogicalResult verifyTritonFunction(
     return op->emitOpError() << "expected triton function with no results";
   }
 
-  // All triton call-like operation use tried results.
+  // All triton call-like operation use tied results.
   auto tiedOp = cast<IREE::Util::TiedOpInterface>(op);
   auto isTiedResult = [&](Value result) {
     return tiedOp.getTiedResultOperand(result);
@@ -149,7 +149,7 @@ static LogicalResult verifyTritonFunction(
   auto tritonInputs = tritonFunctionType.getInputs();
 
   // Collect results that are not tied to arguments, we'll need them later to
-  // check agains triton function type.
+  // check against triton function type.
   SmallVector<Type> untiedRets;
   SmallVector<int64_t> untiedIdxs;
   for (auto indexed : llvm::enumerate(rets)) {

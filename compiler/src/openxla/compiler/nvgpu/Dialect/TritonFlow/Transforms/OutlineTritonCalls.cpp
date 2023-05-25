@@ -170,7 +170,7 @@ static void updateTritonCallForAbi(tritonflow::CallOp call,
     int64_t newArgIdx = permutaion[i];
 
     // In Triton function type scalar (constant) arguments are passed after
-    // destination buffer for results, so we have to adjust index for that.
+    // destination pointers for results, so we have to adjust index for that.
     if (newArgIdx >= args.size()) newArgIdx -= numUntiedResults;
 
     abiArgs[newArgIdx] = args[i];
@@ -178,7 +178,7 @@ static void updateTritonCallForAbi(tritonflow::CallOp call,
 
   call.getArgumentsMutable().assign(abiArgs);
 
-  // Tie results to the new operands after indices after applying permutation.
+  // Tie results to the new operands after updating arguments.
   if (auto tiedOperands = call.getTiedOperands()) {
     SmallVector<int64_t> abiTiedOperands;
 

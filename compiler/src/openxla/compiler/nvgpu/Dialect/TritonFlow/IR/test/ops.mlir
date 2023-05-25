@@ -68,8 +68,8 @@ func.func @main(%arg0: index, %arg1: tensor<?xf32>) {
 
 // -----
 
-func.func private @triton(%arg0: !tt.ptr<f32>) {
-  return
+tt.func private @triton(%arg0: !tt.ptr<f32>) {
+  tt.return
 }
 
 func.func @main(%arg0: tensor<4xf32>) {
@@ -84,8 +84,8 @@ func.func @main(%arg0: tensor<4xf32>) {
 
 // -----
 
-func.func private @triton(%arg0: !tt.ptr<f32>) {
-  return
+tt.func private @triton(%arg0: !tt.ptr<f32>) {
+  tt.return
 }
 
 func.func @main(%arg0: tensor<?xf32>) {

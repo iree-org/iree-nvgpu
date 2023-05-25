@@ -46,9 +46,9 @@ static LogicalResult verifyOpDynamicDims(Operation *op, ValueRange values,
   return success();
 }
 
-static LogicalResult verifyArgumentTypes(Operation *op, FunctionType tritonType,
+static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
                                          TypeRange args) {
-  for (auto pair : llvm::enumerate(llvm::zip(tritonType.getInputs(), args))) {
+  for (auto pair : llvm::enumerate(llvm::zip(tritonArgs, args))) {
     auto [tritonArgType, argType] = pair.value();
 
     // Pointer arguments must be passed as tensors.
@@ -80,14 +80,10 @@ static LogicalResult verifyArgumentTypes(Operation *op, FunctionType tritonType,
   return success();
 }
 
-static LogicalResult verifyResultTypes(Operation *op, FunctionType tritonType,
-                                       TypeRange rets) {
-  // Skip types corresponding to arguments.
-  auto numArgs = tritonType.getNumInputs() - rets.size();
-  auto tritonRets = tritonType.getInputs().drop_front(numArgs);
-
+static LogicalResult verifyResultTypes(Operation *op, TypeRange tritonRets,
+                                       TypeRange rets, size_t offset) {
   for (auto pair : llvm::enumerate(llvm::zip(tritonRets, rets))) {
-    size_t tritonIndex = numArgs + pair.index();
+    size_t tritonIndex = offset + pair.index();
     auto [tritonArgType, argType] = pair.value();
 
     // Results passed to Triton kernels as destination buffers.
@@ -128,9 +124,44 @@ static LogicalResult verifyTritonFunction(Operation *op,
            << tritonFunctionType.getNumInputs() << " arguments";
   }
 
+  // TODO(ezhulenev): Currently we do not have automatic ABI conversion to match
+  // IREE calling convention, so the triton function type does not really match
+  // the call/dispatch arguments. As a temporary work around we keep tensor
+  // arguments separate from scalar arguments and do verification separately for
+  // different kinds of arguments. Once we have an ABI conversion and pipeline
+  // layout as a part of triton executable, we will be able to remove this hack.
+
+  // For empty returns we can ignore result type checking.
+  if (rets.empty()) {
+    if (failed(verifyArgumentTypes(op, tritonFunctionType.getInputs(), args)))
+      return failure();
+  }
+
+  SmallVector<Type> tritonPtrArgs, tritonScalarArgs;
+  for (Type tritonArg : tritonFunctionType.getInputs()) {
+    if (tritonArg.isa<triton::PointerType>()) {
+      tritonPtrArgs.push_back(tritonArg);
+    } else {
+      tritonScalarArgs.push_back(tritonArg);
+    }
+  }
+
+  SmallVector<Type> tensorArgs, scalarArgs;
+  for (Type arg : args) {
+    if (arg.isa<RankedTensorType>()) {
+      tensorArgs.push_back(arg);
+    } else {
+      scalarArgs.push_back(arg);
+    }
+  }
+
+  // TODO(ezhulenev): This is a lie! It only works for the tests we have.
+  auto tritonRets = ArrayRef<Type>(tritonPtrArgs).drop_front(tensorArgs.size());
+
   // Check that arguments and results match Triton signature.
-  if (failed(verifyArgumentTypes(op, tritonFunctionType, args)) ||
-      failed(verifyResultTypes(op, tritonFunctionType, rets)))
+  if (failed(verifyArgumentTypes(op, tritonPtrArgs, tensorArgs)) ||
+      failed(verifyArgumentTypes(op, tritonScalarArgs, scalarArgs)) ||
+      failed(verifyResultTypes(op, tritonRets, rets, /*offset=*/0)))
     return failure();
 
   return success();

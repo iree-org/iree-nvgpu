@@ -38,16 +38,18 @@ using namespace mlir;
 
 namespace openxla::compiler::nvgpu::tritonflow {
 
-// TODO(ezhulenev): Add support for tied results.
+// Returns true if the type uses `pushConstants` IREE ABI.
+static bool isPushConstant(Type type) { return type.isIntOrIndex(); }
 
 // Returns the IREE HAL pipeline layout inferred from the Triton call operation.
+// TODO(ezhulenev): Add support for tied results.
 static IREE::HAL::PipelineLayoutAttr getPipelineLayout(tritonflow::CallOp call,
                                                        triton::FuncOp callee) {
   MLIRContext* ctx = callee->getContext();
 
   // Scalar arguments passed as dispatch constants.
-  int64_t pushConstants = llvm::count_if(
-      callee.getArgumentTypes(), [](Type type) { return type.isIntOrIndex(); });
+  int64_t pushConstants =
+      llvm::count_if(callee.getArgumentTypes(), isPushConstant);
 
   // Bindings for all tensor (buffer) arguments.
   llvm::SmallVector<IREE::HAL::DescriptorSetBindingAttr> bindings;
@@ -95,7 +97,7 @@ static std::optional<SmallVector<int64_t>> updateTritonFunctionForAbi(
   // Partition arguments types, so that all scalars pushed to the end.
   auto firstScalarArg = std::stable_partition(
       args.begin(), args.end(),
-      [](IndexedArg indexed) { return !indexed.type.isIntOrIndex(); });
+      [](IndexedArg indexed) { return !isPushConstant(indexed.type); });
 
   // Function already has an ABI-compatibe signature.
   if (firstScalarArg == args.end() ||

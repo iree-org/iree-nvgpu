@@ -51,8 +51,7 @@ static LogicalResult verifyOpDynamicDims(Operation *op, ValueRange values,
 static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
                                          int64_t tritonOffset, TypeRange args,
                                          int64_t offset = 0) {
-  assert(tritonArgs.size() == args.size() && "type ranges must have same size");
-  for (auto pair : llvm::enumerate(llvm::zip(tritonArgs, args))) {
+  for (auto pair : llvm::enumerate(llvm::zip_equal(tritonArgs, args))) {
     auto [tritonArgType, argType] = pair.value();
 
     int64_t index = offset + pair.index();
@@ -90,8 +89,7 @@ static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
 static LogicalResult verifyResultTypes(Operation *op, TypeRange tritonRets,
                                        int64_t tritonOffset, TypeRange rets,
                                        size_t offset = 0) {
-  assert(tritonRets.size() == rets.size() && "type ranges must have same size");
-  for (auto pair : llvm::enumerate(llvm::zip(tritonRets, rets))) {
+  for (auto pair : llvm::enumerate(llvm::zip_equal(tritonRets, rets))) {
     auto [tritonArgType, argType] = pair.value();
 
     int64_t index = offset + pair.index();
@@ -137,20 +135,19 @@ static LogicalResult verifyTritonFunction(
 
   auto tritonInputs = tritonFunctionType.getInputs();
 
-  // If we do not have a layout, we should check Triton function signature
-  // directly against the call operation arguments and results.
   if (!layout) {
+    // If we do not have a layout, we should check Triton function signature
+    // directly against the call operation arguments and results.
     auto tritonArgs = tritonInputs.take_front(args.size());
     auto tritonRets = tritonInputs.drop_front(args.size());
 
     if (failed(verifyArgumentTypes(op, tritonArgs, 0, args)) ||
         failed(verifyResultTypes(op, tritonRets, args.size(), rets)))
       return failure();
-  }
 
-  // If we have a layout we have to slice triton function arguments and check
-  // them vs dispatch operation types.
-  if (layout) {
+  } else {
+    // If we have a layout we have to slice triton function arguments and check
+    // them vs dispatch operation types.
     auto numConstants = layout.getPushConstants();
     auto numBindings = layout.getSetLayouts().front().getBindings().size();
 
@@ -321,8 +318,8 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
     return emitOpError() << "refers to an unknown Triton function: "
                          << getCalleeAttr();
 
-  // TODO(ezhulenev): Skip verifier until we didn't migrate to an end-to-end
-  // pipeline built around triton.executable operation.
+  // TODO(ezhulenev): Remove this work around when we switch to triton
+  // executable in the end-to-end compilation pipeline.
   if (op->hasAttr("skip_triton_verifier")) return success();
 
   // Check that Triton function is compatible with the call arguments.

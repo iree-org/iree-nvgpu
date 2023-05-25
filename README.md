@@ -48,3 +48,54 @@ Some of the tests can run only on an Ampere+ devices because they rely on the
 cmake --build build
 ctest --test-dir build -R openxla/runtime/nvgpu/cudnn/test/
 ```
+
+## Project Maintenance
+
+This section is a work in progress describing various project maintenance
+tasks.
+
+### Pre-requisite: Install openxla-devtools
+
+```
+pip install git+https://github.com/openxla/openxla-devtools.git
+```
+
+### Sync all deps to pinned versions
+
+```
+openxla-workspace sync
+```
+
+### Update IREE to head
+
+This updates the pinned IREE revision to the HEAD revision at the remote.
+
+```
+# Updates the sync_deps.py metadata.
+openxla-workspace roll iree
+# Brings all dependencies to pinned versions.
+openxla-workspace sync
+```
+
+### Full update of all deps
+
+This updates the pinned revisions of all dependencies. This is presently done
+by updating `openxla-pjrt-plugin` to remote HEAD and deriving the IREE
+dependency from its pin.
+
+```
+# Updates the sync_deps.py metadata.
+openxla-workspace roll nightly
+# Brings all dependencies to pinned versions.
+openxla-workspace sync
+```
+
+### Pin current versions of all deps
+
+This can be done if local, cross project changes have been made and landed.
+It snapshots the state of all deps as actually checked out and updates
+the metadata.
+
+```
+openxla-workspace pin
+```

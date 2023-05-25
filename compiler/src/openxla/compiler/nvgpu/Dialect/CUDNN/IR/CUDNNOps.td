@@ -345,7 +345,7 @@ def CUDNN_HandleOp : CUDNN_Op<"handle", [Pure]> {
 //===----------------------------------------------------------------------===//
 
 def CUDNN_CallOp : CUDNN_Op<"call", [
-    CallOpInterface,
+    DeclareOpInterfaceMethods<CallOpInterface>,
     DeclareOpInterfaceMethods<SymbolUserOpInterface>
   ]> {
   let summary = "cuDNN call operation";
@@ -365,25 +365,8 @@ def CUDNN_CallOp : CUDNN_Op<"call", [
   );
 
   let assemblyFormat = [{
-    `handle` `(` $handle `)` $callee `(` $arguments `)`
-       attr-dict `:`
-       functional-type($arguments, $results)
-  }];
-
-  let extraClassDeclaration = [{
-    /// Get the argument operands to the called function.
-    operand_range getArgOperands() {
-      return {arg_operand_begin(), arg_operand_end()};
-    }
-    operand_iterator arg_operand_begin() { return operand_begin(); }
-    operand_iterator arg_operand_end() { return operand_end(); }
-
-    /// Return the callee of this operation.
-    mlir::CallInterfaceCallable getCallableForCallee() {
-      return getOperation()->getAttrOfType<mlir::FlatSymbolRefAttr>("callee");
-    }
-    
-    void setCalleeFromCallable(::mlir::CallInterfaceCallable callee);
+    `handle` `(` $handle `)` $callee    `(` $arguments `)` attr-dict `:`
+    functional-type($arguments, $results)
   }];
 }
 

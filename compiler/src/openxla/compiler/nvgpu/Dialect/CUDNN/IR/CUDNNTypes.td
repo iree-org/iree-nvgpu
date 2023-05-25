@@ -56,8 +56,8 @@ def CUDNN_TensorDescType : CUDNN_Type<"TensorDesc", "tensor_desc"> {
     );
     // TODO: This is currently order dependent, remove the need for named parts.
     let assemblyFormat = [{
-      `<` custom<DimensionList>($shape, $element_type) `,` `alignment` `=` $alignment `,`
-      `stride` `=` `[` $stride `]` `>`
+      `<` custom<DimensionList>($shape, $element_type) `,` `alignment` `=`
+      $alignment `,` `stride` `=` `[` $stride `]` `>`
     }];
 }
 

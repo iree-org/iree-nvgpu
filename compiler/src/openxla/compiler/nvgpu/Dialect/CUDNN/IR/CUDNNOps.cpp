@@ -180,6 +180,10 @@ void CallOp::setCalleeFromCallable(CallInterfaceCallable callee) {
   return setCalleeAttr(cast<FlatSymbolRefAttr>(symRef));
 }
 
+OperandRange CallOp::getArgOperands() { return getArguments(); }
+
+CallInterfaceCallable CallOp::getCallableForCallee() { return getCalleeAttr(); }
+
 }  // namespace openxla::compiler::nvgpu::cudnn
 
 #define GET_OP_CLASSES

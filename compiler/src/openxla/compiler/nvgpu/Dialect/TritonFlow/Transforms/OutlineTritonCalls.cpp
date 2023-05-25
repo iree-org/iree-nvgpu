@@ -9,6 +9,7 @@
 #include <triton/Dialect/Triton/IR/Dialect.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <iterator>
 #include <optional>
 
@@ -16,6 +17,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/Module.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -51,22 +53,30 @@ static IREE::HAL::PipelineLayoutAttr getPipelineLayout(tritonflow::CallOp call,
   int64_t pushConstants =
       llvm::count_if(callee.getArgumentTypes(), isPushConstant);
 
-  // Bindings for all tensor (buffer) arguments.
+  // Bindings for all tensor (pointer) arguments.
   llvm::SmallVector<IREE::HAL::DescriptorSetBindingAttr> bindings;
 
-  // Add tensor (buffer) arguments as ReadOnly bindings.
-  for (auto arg : call.getArguments().getTypes()) {
-    if (auto tensor = arg.dyn_cast<RankedTensorType>()) {
+  for (auto arg : llvm::enumerate(call.getArguments())) {
+    // If argument is not tied to any results we assume it's read only. It's
+    // undefined behavior if Triton implementation writes to the argument.
+    int64_t index = call.getTiedOperandsIndexAndLength().first + arg.index();
+    std::optional<IREE::HAL::DescriptorFlags> flags =
+        !call.isOperandTied(index)
+            ? std::optional(IREE::HAL::DescriptorFlags::ReadOnly)
+            : std::nullopt;
+
+    if (auto tensor = arg.value().getType().dyn_cast<RankedTensorType>()) {
       bindings.push_back(IREE::HAL::DescriptorSetBindingAttr::get(
           ctx, /*ordinal=*/bindings.size(),
-          IREE::HAL::DescriptorType::StorageBuffer,
-          IREE::HAL::DescriptorFlags::ReadOnly));
+          IREE::HAL::DescriptorType::StorageBuffer, flags));
     }
   }
 
-  // Add results as bindings with default flags.
-  for (auto ret : call.getResultTypes()) {
-    if (auto tensor = ret.dyn_cast<RankedTensorType>()) {
+  for (auto ret : call.getResults()) {
+    // Skip tied results as they alrady passed in as arguments.
+    if (call.getTiedResultOperand(ret)) continue;
+
+    if (auto tensor = ret.getType().dyn_cast<RankedTensorType>()) {
       bindings.push_back(IREE::HAL::DescriptorSetBindingAttr::get(
           ctx, /*ordinal=*/bindings.size(),
           IREE::HAL::DescriptorType::StorageBuffer, std::nullopt));
@@ -132,6 +142,15 @@ static std::optional<SmallVector<int64_t>> updateTritonFunctionForAbi(
   auto abiFunctionType = FunctionType::get(ctx, abiTypes, TypeRange());
   callee.setFunctionType(abiFunctionType);
 
+  // Update function argument attributes to match new basic block arguments.
+  SmallVector<DictionaryAttr> argAttrs;
+  SmallVector<DictionaryAttr> abiArgAttrs(args.size());
+  callee.getAllArgAttrs(argAttrs);
+  for (unsigned i = 0; i < args.size(); ++i) {
+    abiArgAttrs[abiPermutation[i]] = argAttrs[i];
+  }
+  callee.setAllArgAttrs(abiArgAttrs);
+
   return abiPermutation;
 }
 
@@ -142,17 +161,35 @@ static void updateTritonCallForAbi(tritonflow::CallOp call,
   SmallVector<Value> args = llvm::to_vector(call.getArguments());
   SmallVector<Value> abiArgs(call.getArguments().size());
 
+  // Number of result tensors not tied to any of the operands.
+  size_t numUntiedResults = llvm::count_if(
+      call.getResults(),
+      [&](Value result) { return !call.getTiedResultOperand(result); });
+
   for (unsigned i = 0; i < args.size(); ++i) {
     int64_t newArgIdx = permutaion[i];
 
-    // In Triton function type scalar arguments are passed after destination
-    // buffer for results, so we have to adjust for that.
-    if (newArgIdx >= args.size()) newArgIdx -= call->getNumResults();
+    // In Triton function type scalar (constant) arguments are passed after
+    // destination buffer for results, so we have to adjust index for that.
+    if (newArgIdx >= args.size()) newArgIdx -= numUntiedResults;
 
     abiArgs[newArgIdx] = args[i];
   }
 
   call.getArgumentsMutable().assign(abiArgs);
+
+  // Tie results to the new operands after indices after applying permutation.
+  if (auto tiedOperands = call.getTiedOperands()) {
+    SmallVector<int64_t> abiTiedOperands;
+
+    for (auto attr : tiedOperands->getValue()) {
+      auto idx = attr.cast<IntegerAttr>().getInt();
+      abiTiedOperands.push_back(idx < 0 ? idx : permutaion[idx]);
+    }
+
+    call.setTiedOperandsAttr(
+        OpBuilder(call).getIndexArrayAttr(abiTiedOperands));
+  }
 }
 
 static LogicalResult outlineTritonFlowCallOp(tritonflow::CallOp call,

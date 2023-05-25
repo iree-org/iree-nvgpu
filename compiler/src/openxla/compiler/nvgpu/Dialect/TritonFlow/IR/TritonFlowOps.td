@@ -10,6 +10,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
 
+include "iree/compiler/Dialect/HAL/IR/HALBase.td"
 include "iree/compiler/Dialect/Util/IR/UtilBase.td"
 include "iree/compiler/Dialect/Util/IR/UtilInterfaces.td"
 include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.td"
@@ -117,19 +118,22 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
   let arguments = (ins
     OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
-    FlatSymbolRefAttr:$function_ref
+    FlatSymbolRefAttr:$function_ref,
+    HAL_PipelineLayoutAttr:$layout
   );
 
   let assemblyFormat = [{
     custom<SymbolVisibility>($sym_visibility)
     custom<SymbolAlias>($sym_name, $function_ref)
+    `layout` `(` $layout `)`
     attr-dict-with-keyword
   }];
 
   let builders = [
     OpBuilder<(ins
       "llvm::StringRef":$sym_name,
-      "mlir::FlatSymbolRefAttr":$function_ref)>,
+      "mlir::FlatSymbolRefAttr":$function_ref,
+      "mlir::iree_compiler::IREE::HAL::PipelineLayoutAttr":$layout)>,
   ];
 }
 

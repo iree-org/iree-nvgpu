@@ -1,4 +1,4 @@
-// RUN: iree-opt %s --iree-plugin=openxla-triton                               \
+// RUN: iree-opt %s --iree-plugin=openxla-triton --split-input-file            \
 // RUN:             --openxla-nvgpu-outline-triton-calls                       \
 // RUN:   | FileCheck %s
 
@@ -20,8 +20,15 @@ func.func @main(%arg0: tensor<?xf32>) -> tensor<?xf32> {
   return %0 : tensor<?xf32>
 }
 
+// CHECK: #[[LAYOUT:.*]] = #hal.pipeline.layout<push_constants = 1,
+// CHECK:   sets = [<0, bindings = [
+// CHECK:                 <0, storage_buffer, ReadOnly>,
+// CHECK:                 <1, storage_buffer>
+// CHECK:               ]>
+// CHECK:          ]>
+
 // CHECK: triton.executable public @triton.executable {
-// CHECK:     triton.executable.export public @triton
+// CHECK:     triton.executable.export public @triton layout(#[[LAYOUT]])
 // CHECK:     builtin.module {
 // CHECK:       tt.func @triton({{.*}}) {
 // CHECK:         tt.return
@@ -29,7 +36,10 @@ func.func @main(%arg0: tensor<?xf32>) -> tensor<?xf32> {
 // CHECK:     }
 // CHECK:   }
 
-// CHECK: func @main({{.*}}) -> tensor<?xf32> {
-// CHECK:   %[[RES:.*]] = triton.dispatch @triton.executable::@triton
+// CHECK: func @main(%[[ARG0:.*]]: tensor<?xf32>) -> tensor<?xf32> {
+// CHECK:   %[[G0:.*]] = affine.apply
+// CHECK:   %[[I32:.*]] = arith.index_cast
+// CHECK:   %[[RES:.*]] = triton.dispatch @triton.executable::@triton[%[[G0]]]
+// CHECK:                                 (%[[ARG0]], %[[I32]])
 // CHECK:   return %[[RES]] : tensor<?xf32>
 // CHECK: }

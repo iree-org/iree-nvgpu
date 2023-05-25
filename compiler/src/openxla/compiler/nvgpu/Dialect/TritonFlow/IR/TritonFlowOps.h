@@ -7,6 +7,7 @@
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_IR_TRITONFLOW_OPS_H
 #define OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_IR_TRITONFLOW_OPS_H
 
+#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "iree/compiler/Dialect/Util/IR/UtilTypes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"

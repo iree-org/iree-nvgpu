@@ -14,9 +14,12 @@ triton.executable @foo {
 
 // -----
 
+#pipeline_layout = #hal.pipeline.layout<push_constants = 1,
+  sets = [<0, bindings = [<0, storage_buffer, ReadOnly>]>]>
+
 triton.executable @foo {
   // expected-error @+1 {{op refers to an unknown Triton function: @bar}}
-  triton.executable.export @bar
+  triton.executable.export @bar layout(#pipeline_layout)
   builtin.module {}
 }
 

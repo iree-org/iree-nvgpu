@@ -34,8 +34,9 @@ func.func @main(%arg0: tensor<?xf32>, %arg1: tensor<?xf32>) -> tensor<?xf32> {
   // Currently ABI only supports i32 scalars.
   %d0_i32 = arith.index_cast %d0 : index to i32
 
-  %0 = triton.call @add_kernel[%g0](%d0_i32, %arg0, %arg1)
-    : (i32, tensor<?xf32>{%d0}, tensor<?xf32>{%d0}) -> tensor<?xf32>{%d0}
+  %0 = triton.call @add_kernel[%g0](%arg0, %arg1, %d0_i32)
+    { skip_triton_verifier } // TODO(ezhulemev): Remove this attribute!
+    : (tensor<?xf32>{%d0}, tensor<?xf32>{%d0}, i32) -> tensor<?xf32>{%d0}
 
   return %0 : tensor<?xf32>
 }

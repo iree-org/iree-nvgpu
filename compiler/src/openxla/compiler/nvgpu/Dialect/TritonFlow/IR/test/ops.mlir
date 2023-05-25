@@ -2,15 +2,20 @@
 // RUN:   | iree-opt --iree-plugin=openxla-triton --split-input-file \
 // RUN:   | FileCheck %s
 
+#layout = #hal.pipeline.layout<push_constants = 1,
+  sets = [<0, bindings = [<0, storage_buffer>]>]>
+
 triton.executable private @example {
-  triton.executable.export @compute
+  triton.executable.export @compute layout(#layout)
   builtin.module {
     func.func @compute(%arg0: !tt.ptr<f32>) { return }
   }
 }
 
+// CHECK: #[[LAYOUT:.*]] = #hal.pipeline.layout
+
 // CHECK: triton.executable private @example {
-// CHECK:   triton.executable.export public @compute
+// CHECK:   triton.executable.export public @compute layout(#[[LAYOUT]])
 // CHECK:   builtin.module {
 // CHECK:     func.func @compute(%[[ARG:.*]]: !tt.ptr<f32>)
 // CHECK:   }
@@ -18,8 +23,11 @@ triton.executable private @example {
 
 // -----
 
+#layout = #hal.pipeline.layout<push_constants = 1,
+  sets = [<0, bindings = [<0, storage_buffer>]>]>
+
 triton.executable private @example {
-  triton.executable.export public @compute as("foo")
+  triton.executable.export public @compute as("foo") layout(#layout)
   builtin.module {
     func.func @compute(%arg0: !tt.ptr<f32>) { return }
   }
@@ -29,8 +37,11 @@ triton.executable private @example {
 
 // -----
 
+#layout = #hal.pipeline.layout<push_constants = 1,
+  sets = [<0, bindings = [<0, storage_buffer>]>]>
+
 triton.executable private @example {
-  triton.executable.export @compute
+  triton.executable.export @compute layout(#layout)
   builtin.module {
     func.func @compute(%arg0: !tt.ptr<f32>) { return }
   }
@@ -46,8 +57,11 @@ func.func @main(%arg0: index, %arg1: tensor<4xf32>) {
 
 // -----
 
+#layout = #hal.pipeline.layout<push_constants = 1,
+  sets = [<0, bindings = [<0, storage_buffer>]>]>
+
 triton.executable private @example {
-  triton.executable.export @compute
+  triton.executable.export @compute layout(#layout)
   builtin.module {
     func.func @compute(%arg0: !tt.ptr<f32>) { return }
   }
@@ -68,8 +82,8 @@ func.func @main(%arg0: index, %arg1: tensor<?xf32>) {
 
 // -----
 
-func.func private @triton(%arg0: !tt.ptr<f32>) {
-  return
+tt.func private @triton(%arg0: !tt.ptr<f32>) {
+  tt.return
 }
 
 func.func @main(%arg0: tensor<4xf32>) {
@@ -84,8 +98,8 @@ func.func @main(%arg0: tensor<4xf32>) {
 
 // -----
 
-func.func private @triton(%arg0: !tt.ptr<f32>) {
-  return
+tt.func private @triton(%arg0: !tt.ptr<f32>) {
+  tt.return
 }
 
 func.func @main(%arg0: tensor<?xf32>) {

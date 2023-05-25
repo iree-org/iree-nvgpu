@@ -6,8 +6,10 @@
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
+#include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "iree/compiler/Dialect/Util/IR/UtilOps.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -15,8 +17,12 @@
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/FunctionInterfaces.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/Operation.h"
+#include "mlir/IR/Types.h"
 #include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
+#include "triton/Dialect/Triton/IR/Types.h"
 
 namespace openxla::compiler::nvgpu::tritonflow {
 
@@ -39,6 +45,137 @@ static LogicalResult verifyOpDynamicDims(Operation *op, ValueRange values,
            << " dynamic dimensions but only " << dynamicDims.size()
            << " dimension values are attached";
   }
+  return success();
+}
+
+static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
+                                         int64_t tritonOffset, TypeRange args,
+                                         int64_t offset = 0) {
+  for (auto pair : llvm::enumerate(llvm::zip_equal(tritonArgs, args))) {
+    auto [tritonArgType, argType] = pair.value();
+
+    int64_t index = offset + pair.index();
+    int64_t tritonIndex = tritonOffset + pair.index();
+
+    // Pointer arguments must be passed as tensors.
+    if (auto ptr = tritonArgType.dyn_cast<triton::PointerType>()) {
+      auto tensor = argType.dyn_cast<RankedTensorType>();
+      if (!tensor)
+        return op->emitOpError()
+               << "argument #" << index
+               << " must be a tensor matching Triton pointer type at #"
+               << tritonIndex << " (" << argType << " vs " << ptr << ")";
+
+      if (ptr.getPointeeType() != tensor.getElementType())
+        return op->emitOpError()
+               << "argument #" << index
+               << " element type must match a Triton pointer type at #"
+               << tritonIndex << " (" << tensor.getElementType() << " vs "
+               << ptr.getPointeeType() << ")";
+    }
+
+    // Scalar arguments must be passed as scalar values.
+    if (auto integer = tritonArgType.dyn_cast<IntegerType>()) {
+      if (integer != argType)
+        return op->emitOpError()
+               << "argument #" << index << " must be a scalar of " << integer
+               << " type";
+    }
+  }
+
+  return success();
+}
+
+static LogicalResult verifyResultTypes(Operation *op, TypeRange tritonRets,
+                                       int64_t tritonOffset, TypeRange rets,
+                                       size_t offset = 0) {
+  for (auto pair : llvm::enumerate(llvm::zip_equal(tritonRets, rets))) {
+    auto [tritonArgType, argType] = pair.value();
+
+    int64_t index = offset + pair.index();
+    int64_t tritonIndex = tritonOffset + pair.index();
+
+    // Results passed to Triton kernels as destination buffers.
+    if (auto ptr = tritonArgType.dyn_cast<triton::PointerType>()) {
+      auto tensor = argType.dyn_cast<RankedTensorType>();
+      if (!tensor)
+        return op->emitOpError()
+               << "result #" << index
+               << " must be a tensor matching Triton pointer type at #"
+               << tritonIndex << " (" << argType << " vs " << ptr << ")";
+
+      if (ptr.getPointeeType() != tensor.getElementType())
+        return op->emitOpError()
+               << "result #" << index
+               << " element type must match a Triton pointer type at #"
+               << tritonIndex << " (" << tensor.getElementType() << " vs "
+               << ptr.getPointeeType() << ")";
+    }
+  }
+
+  return success();
+}
+
+static LogicalResult verifyTritonFunction(
+    Operation *op, FunctionType tritonFunctionType, TypeRange args,
+    TypeRange rets, IREE::HAL::PipelineLayoutAttr layout = {}) {
+  // We don't expect Triton functions returning any results at all.
+  if (tritonFunctionType.getNumResults() != 0) {
+    return op->emitOpError() << "expected triton function with no results";
+  }
+
+  // Triton functions use "destination-passing style" for buffer outputs.
+  size_t expectedTritonArgs = args.size() + rets.size();
+  if (tritonFunctionType.getNumInputs() != expectedTritonArgs) {
+    return op->emitOpError()
+           << "expected triton function with " << expectedTritonArgs
+           << " arguments, got a function with "
+           << tritonFunctionType.getNumInputs() << " arguments";
+  }
+
+  auto tritonInputs = tritonFunctionType.getInputs();
+
+  if (!layout) {
+    // If we do not have a layout, we should check Triton function signature
+    // directly against the call operation arguments and results.
+    auto tritonArgs = tritonInputs.take_front(args.size());
+    auto tritonRets = tritonInputs.drop_front(args.size());
+
+    if (failed(verifyArgumentTypes(op, tritonArgs, 0, args)) ||
+        failed(verifyResultTypes(op, tritonRets, args.size(), rets)))
+      return failure();
+
+  } else {
+    // If we have a layout we have to slice triton function arguments and check
+    // them vs dispatch operation types.
+    auto numConstants = layout.getPushConstants();
+    auto numBindings = layout.getSetLayouts().front().getBindings().size();
+
+    auto numBufArgs = numBindings - rets.size();
+
+    {  // Check buffer arguments.
+      auto bufs0 = tritonInputs.take_front(numBufArgs);
+      auto bufs1 = args.take_front(bufs0.size());
+      if (failed(verifyArgumentTypes(op, bufs0, /*tritonOffset=*/0, bufs1)))
+        return failure();
+    }
+
+    {  // Check constant (scalar) arguments.
+      auto csts0 = tritonInputs.drop_front(numBindings);
+      auto csts1 = args.drop_front(numBufArgs).take_front(numConstants);
+      if (failed(verifyArgumentTypes(op, csts0, /*tritonOffset=*/numBindings,
+                                     csts1, /*offset=*/numBufArgs)))
+        return failure();
+    }
+
+    {  // Check results (result buffer destinations).
+      auto rets0 = tritonInputs.drop_front(numBufArgs).take_front(rets.size());
+      if (failed(verifyResultTypes(op, rets0,
+                                   /*tritonOffset=*/numBufArgs, rets)))
+        return failure();
+    }
+  }
+
   return success();
 }
 
@@ -67,9 +204,10 @@ LogicalResult ExecutableOp::verify() {
 
 void ExecutableExportOp::build(OpBuilder &builder, OperationState &state,
                                StringRef sym_name,
-                               FlatSymbolRefAttr function_ref) {
+                               FlatSymbolRefAttr function_ref,
+                               IREE::HAL::PipelineLayoutAttr layout) {
   build(builder, state, /*sym_visibility=*/nullptr,
-        builder.getStringAttr(sym_name), function_ref);
+        builder.getStringAttr(sym_name), function_ref, layout);
 }
 
 LogicalResult ExecutableExportOp::verifySymbolUses(
@@ -125,9 +263,23 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!exportOp)
     return emitOpError() << "refers to an unknown Triton entry point: "
                          << getEntryPoint();
-  // TODO(ezhulenev): Verify that the target function has matching operands. The
-  // tricky part is that the target function can be in Triton dialect, or might
-  // be lowered to LLVM, and not clear if we should verify both.
+
+  // Find the exported function in the inner module.
+  auto innerModule = exportOp.getParentOp<ExecutableOp>().getInnerModule();
+  auto tritonFunc = symbolTable.lookupNearestSymbolFrom<triton::FuncOp>(
+      innerModule, exportOp.getFunctionRefAttr());
+
+  // Export op itself checks that exported function exists in the inner module,
+  // so it only means that it was already lowered to LLVM and we skip verifier.
+  if (!tritonFunc) return success();
+
+  // Check that Triton function is compatible with the call arguments.
+  if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),
+                                  getArguments().getTypes(), getResultTypes(),
+                                  exportOp.getLayout()))) {
+    return failure();
+  }
+
   return success();
 }
 
@@ -158,9 +310,25 @@ LogicalResult DispatchOp::verify() {
 //===----------------------------------------------------------------------===//
 
 LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
-  if (!symbolTable.lookupNearestSymbolFrom(*this, getCalleeAttr()))
+  Operation *op = getOperation();
+
+  auto tritonFunc =
+      symbolTable.lookupNearestSymbolFrom<triton::FuncOp>(op, getCalleeAttr());
+  if (!tritonFunc)
     return emitOpError() << "refers to an unknown Triton function: "
                          << getCalleeAttr();
+
+  // TODO(ezhulenev): Remove this work around when we switch to triton
+  // executable in the end-to-end compilation pipeline.
+  if (op->hasAttr("skip_triton_verifier")) return success();
+
+  // Check that Triton function is compatible with the call arguments.
+  if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),
+                                  getArguments().getTypes(),
+                                  getResultTypes()))) {
+    return failure();
+  }
+
   return success();
 }
 

@@ -23,6 +23,7 @@ def OutlineTritonCalls :
 
   let dependentDialects = [
     "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
+    "mlir::iree_compiler::IREE::HAL::HALDialect",
   ];
 }
 

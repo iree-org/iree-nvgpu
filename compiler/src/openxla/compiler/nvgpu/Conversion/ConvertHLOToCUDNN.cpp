@@ -30,10 +30,9 @@ using namespace mlir::iree_compiler;
 
 using TensorValue = TypedValue<TensorType>;
 
-static CudnnTensorType getCudnnTensorType(mlir::TensorType type,
-                                          Layout layout) {
+static CudnnTensorType getCudnnTensorType(TensorType type, Layout layout) {
   auto shape = type.getShape();
-  assert(shape.size() == 4);
+  assert(shape.size() == 4 && "only impl for 4D");
   SmallVector<int64_t> newShape;
   switch (layout) {
     case Layout::NCHW:
@@ -58,103 +57,49 @@ static FailureOr<Layout> getCudnnTensorLayout(int64_t batchDim,
 }
 
 static FailureOr<Layout> getCudnnKernelLayout(int64_t inputDim,
-                                              int64_t outputDim,
-                                              MLIRContext* ctx) {
+                                              int64_t outputDim) {
   if (outputDim != 0) return failure();
   // Return input/output layout instead of the kernel layout so that casts
   // cancel themselves. The actual layouts are the same and the lowering and
-  // runtime implementation handle it correctly. TODO(chsigg): revert when
-  // layout propagation is implemented.
+  // runtime implementation handle it correctly.
+  // TODO(chsigg): revert when layout propagation is implemented.
   if (inputDim == 1) return Layout::NCHW;  // KCHW
   if (inputDim == 3) return Layout::NHWC;  // KHWC
   return failure();
 }
 
-// Outlines all transitive ops defining 'result' into a cudnn.graph op and calls
-// it with `arguments`.
-static LogicalResult outlineToGraph(TensorValue result,
-                                    ArrayRef<TensorValue> arguments,
-                                    FunctionType funcType,
-                                    PatternRewriter& rewriter) {
-  Operation* root = result.getDefiningOp();
-  if (!root)
-    return rewriter.notifyMatchFailure(result.getLoc(), "expected def by op");
-  if (root->getNumResults() != 1)
-    return rewriter.notifyMatchFailure(result.getLoc(), "expected one result");
-  func::FuncOp func = root->getParentOfType<func::FuncOp>();
-  if (!func) return rewriter.notifyMatchFailure(root, "expected child of func");
-  ModuleOp m = func->getParentOfType<ModuleOp>();
-  if (!m)
-    return rewriter.notifyMatchFailure(root,
-                                       "expected child of func in module");
+namespace {
+class CudnnHandleCache {
+ public:
+  IREE::Util::GlobalOp getGlobalHandle(PatternRewriter& rewriter, Location loc,
+                                       ModuleOp m, StringRef baseName) {
+    if (globalHandle) return *globalHandle;
 
-  // Collect the set of ops to clone into the region.
-  SetVector<Operation*> ops;
-  ops.insert(root);
-  DenseSet<Value> argSet(arguments.begin(), arguments.end());
-  for (size_t index = 0; index < ops.size(); ++index) {
-    Operation* op = ops[index];
-    for (Value operand : op->getOperands()) {
-      if (argSet.count(operand)) continue;
-      Operation* def = operand.getDefiningOp();
-      if (!def)
-        return rewriter.notifyMatchFailure(op, "expected operands def by op");
-      ops.insert(def);
-    }
+    // Create global handle before any other initialization.
+    OpBuilder::InsertionGuard g(rewriter);
+    rewriter.setInsertionPointToStart(m.getBody());
+    static constexpr char globalHandleName[] = "cudnn.shared.handle";
+    auto handleTy = rewriter.getType<HandleType>();
+    globalHandle = rewriter.create<IREE::Util::GlobalOp>(
+        loc, globalHandleName, /*isMutable=*/false, handleTy);
+
+    // Create global handle initializer.
+    auto initializer = rewriter.create<IREE::Util::InitializerOp>(loc);
+    rewriter.setInsertionPointToStart(initializer.addEntryBlock());
+    auto device = rewriter.create<IREE::HAL::ExSharedDeviceOp>(loc);
+    auto handle = rewriter.create<HandleOp>(loc, device);
+    rewriter.create<IREE::Util::GlobalStoreOp>(loc, handle, *globalHandle);
+    rewriter.create<IREE::Util::InitializerReturnOp>(loc);
+
+    return *globalHandle;
   }
 
-  // Create the cudnn.graph op with an empty region.
-  SymbolTable symbolTable(func->getParentOp());
-  rewriter.setInsertionPoint(func);
-  GraphOp graph = rewriter.create<GraphOp>(root->getLoc(), funcType,
-                                           /*arg_attrs=*/ArrayAttr{},
-                                           /*res_attrs=*/ArrayAttr{});
-  graph.setName(root->getName().getStringRef());
-  symbolTable.insert(graph);
+ private:
+  std::optional<IREE::Util::GlobalOp> globalHandle;
+};
+}  // namespace
 
-  // Clone ops into region.
-  rewriter.setInsertionPointToStart(graph.addEntryBlock());
-  IRMapping mapping;
-  for (size_t index = 0; index < arguments.size(); ++index) {
-    Value arg = arguments[index];
-    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
-        arg.getLoc(), arg.getType(), graph.getArgument(index));
-    mapping.map(arg, castOp.getResult(0));
-  }
-  ValueRange results;
-  for (Operation* op : llvm::reverse(ops)) {
-    results = rewriter.clone(*op, mapping)->getResults();
-    mapping.map(op->getResults(), results);
-  }
-  auto castOp = rewriter.create<UnrealizedConversionCastOp>(
-      result.getLoc(), funcType.getResults(), results);
-  rewriter.create<ReturnOp>(root->getLoc(), castOp.getResults());
-
-  // Create global handle before any other initialization.
-  rewriter.setInsertionPointToStart(m.getBody());
-  Location loc = root->getLoc();
-  std::string globalHandleName = (graph.getName() + ".handle").str();
-  auto handleTy = rewriter.getType<HandleType>();
-  auto globalHandle = rewriter.create<IREE::Util::GlobalOp>(
-      loc, globalHandleName, /*isMutable=*/false, handleTy);
-
-  // Create global handle initializer.
-  auto initializer = rewriter.create<IREE::Util::InitializerOp>(loc);
-  rewriter.setInsertionPointToStart(initializer.addEntryBlock());
-  auto device = rewriter.create<IREE::HAL::ExSharedDeviceOp>(loc);
-  auto handle = rewriter.create<HandleOp>(loc, device);
-  rewriter.create<IREE::Util::GlobalStoreOp>(loc, handle, globalHandle);
-  rewriter.create<IREE::Util::InitializerReturnOp>(loc);
-
-  // Replace root with cudnn.call op.
-  rewriter.setInsertionPoint(root);
-  auto loadedHandle = rewriter.create<IREE::Util::GlobalLoadOp>(
-      loc, handleTy, globalHandle.getSymNameAttr());
-  rewriter.replaceOpWithNewOp<CallOp>(
-      root, result.getType(), graph.getName(), loadedHandle,
-      ArrayRef<Value>(arguments.begin(), arguments.size()));
-  return success();
-}
+/// Outline HLO ops into CUDNN graphs.
 
 // Returns the 'min' value of clamp 'op', if it can be converted to relu.
 static FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
@@ -171,22 +116,28 @@ static FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
   return min;
 }
 
+namespace {
 struct ConvLayouts {
   Layout input, kernel, output;
 };
+}  // namespace
 
 // Returns conv layouts, if it can be converted to cudnn.convolution.
 static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
                                         PatternRewriter& rewriter) {
-  if (op.getBatchGroupCount() != 1)
+  if (op.getBatchGroupCount() != 1) {
     return rewriter.notifyMatchFailure(op,
                                        "expected batch_group_count to be 1");
-  if (op.getFeatureGroupCount() != 1)
+  }
+  if (op.getFeatureGroupCount() != 1) {
     return rewriter.notifyMatchFailure(op,
                                        "expected feature_group_count to be 1");
-  if (op.getPrecisionConfig())
+  }
+  if (op.getPrecisionConfig()) {
     return rewriter.notifyMatchFailure(op, "expected no precision config");
+  }
 
+  // Check unit dilation.
   auto isNoneOrValue = [](std::optional<DenseIntElementsAttr> attr,
                           int64_t value) {
     return !attr || llvm::all_of(attr->getValues<APInt>(), [&](APInt value) {
@@ -194,14 +145,18 @@ static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
     });
   };
   if (!isNoneOrValue(op.getLhsDilation(), 1))
-    return rewriter.notifyMatchFailure(op, "expected lhs_dilation to be 1");
+    return rewriter.notifyMatchFailure(op, "expected lhs dilation to be 1");
   if (!isNoneOrValue(op.getRhsDilation(), 1))
-    return rewriter.notifyMatchFailure(op, "expected rhs_dilation to be 1");
+    return rewriter.notifyMatchFailure(op, "expected rhs dilation to be 1");
+
+  // Check no window reversal.
   if (op.getWindowReversal() &&
       llvm::any_of(op.getWindowReversal()->getValues<bool>(),
-                   [](bool reversal) { return reversal; }))
-    return rewriter.notifyMatchFailure(op, "expected no window_reversal");
+                   [](bool reversal) { return reversal; })) {
+    return rewriter.notifyMatchFailure(op, "expected no window reversal");
+  }
 
+  // Check 2D convolution.
   auto dims = op.getDimensionNumbers();
   if (dims.getInputSpatialDimensions().size() != 2 ||
       dims.getOutputSpatialDimensions().size() != 2 ||
@@ -209,19 +164,19 @@ static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
     return rewriter.notifyMatchFailure(op, "expected 2D convolution");
   }
 
+  // Determine input, output, and kernel layouts.
   FailureOr<Layout> inputLayout = getCudnnTensorLayout(
       dims.getInputBatchDimension(), dims.getInputFeatureDimension());
-  if (failed(inputLayout))
+  if (failed(inputLayout)) {
     return rewriter.notifyMatchFailure(op, "expected input to be NCHW or NHWC");
-
-  FailureOr<Layout> kernelLayout = getCudnnKernelLayout(
-      dims.getKernelInputFeatureDimension(),
-      dims.getKernelOutputFeatureDimension(), op->getContext());
-  if (failed(kernelLayout)) {
-    return rewriter.notifyMatchFailure(
-        op, "expected kernel to be KCHW, KHWC or HWCK");
   }
-
+  FailureOr<Layout> kernelLayout =
+      getCudnnKernelLayout(dims.getKernelInputFeatureDimension(),
+                           dims.getKernelOutputFeatureDimension());
+  if (failed(kernelLayout)) {
+    return rewriter.notifyMatchFailure(op,
+                                       "expected kernel to be KCHW or KHWC");
+  }
   FailureOr<Layout> outputLayout = getCudnnTensorLayout(
       dims.getOutputBatchDimension(), dims.getOutputFeatureDimension());
   if (failed(outputLayout)) {
@@ -232,54 +187,118 @@ static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
   return {{*inputLayout, *kernelLayout, *outputLayout}};
 }
 
-// Matches defining ops starting from 'result' and returns the graph inputs.
-static LogicalResult outlineToGraph(TensorValue result,
-                                    PatternRewriter& rewriter) {
-  // The layout of the first convolution output, if we encounter such an op.
-  // Eventually, this should be replaced by layout propagation.
-  std::optional<Layout> layout;
-  SmallVector<TensorValue> arguments = {result};
-  for (size_t i = 0; i < arguments.size();) {
-    Operation* defOp = arguments[i].getDefiningOp();
-    if (defOp == nullptr) {
-      ++i;
-      continue;
-    }
-    if (auto op = dyn_cast<stablehlo::ClampOp>(defOp)) {
-      if (succeeded(matchRelu(op, rewriter))) {
-        arguments[i] = op.getOperand();
-      } else {
-        ++i;
-      }
-      continue;
-    }
-    if (auto op = dyn_cast<stablehlo::ConvolutionOp>(defOp)) {
-      auto layouts = matchConv(op, rewriter);
-      if (succeeded(layouts) && (!layout || layout == layouts->output)) {
-        layout = layouts->output;
-        arguments[i] = op.getLhs();
-        arguments.push_back(op.getRhs());
-      } else {
-        ++i;
-      }
-      continue;
-    }
-    ++i;
-  }
-  if (arguments.size() == 1 && arguments.front() == result) return failure();
-  auto getType = [&](TensorValue operand) -> Type {
-    return getCudnnTensorType(operand.getType(), layout.value_or(Layout::NCHW));
-  };
-  FunctionType funcType = rewriter.getFunctionType(
-      to_vector(map_range(arguments, getType)), getType(result));
-  return outlineToGraph(result, arguments, funcType, rewriter);
-}
-
-// Pattern entry point to outline a cudnn.graph with 'root'.
+namespace {
 template <typename OpTy>
-static LogicalResult outlineToGraph(OpTy root, PatternRewriter& rewriter) {
-  return outlineToGraph(root.getResult(), rewriter);
-}
+class OutlineCudnnGraphPattern : public OpRewritePattern<OpTy> {
+ public:
+  OutlineCudnnGraphPattern(MLIRContext* ctx,
+                           std::shared_ptr<CudnnHandleCache> cudnnHandleCache,
+                           PatternBenefit benefit = 1)
+      : OpRewritePattern<OpTy>(ctx, benefit),
+        cudnnHandleCache(cudnnHandleCache) {}
+
+  LogicalResult matchAndRewrite(OpTy op,
+                                PatternRewriter& rewriter) const override {
+    // Match only ops with a unique result in a func in a module.
+    if (op->getNumResults() != 1) {
+      return rewriter.notifyMatchFailure(op, "expected one result");
+    }
+    func::FuncOp func = op->template getParentOfType<func::FuncOp>();
+    if (!func) {
+      return rewriter.notifyMatchFailure(op, "expected child of func");
+    }
+    ModuleOp m = func->getParentOfType<ModuleOp>();
+    if (!m) {
+      return rewriter.notifyMatchFailure(op,
+                                         "expected child of func in module");
+    }
+
+    // Collect the set of ops and arguments to clone into the CUDNN graph.
+    // TODO: Ensure the uniqueness of arguments.
+    TensorValue result = op.getResult();
+    // The layout of the first convolution output, if we encounter such an op.
+    // TODO: Eventually, this should be replaced by layout propagation.
+    std::optional<Layout> layout;
+    SmallVector<TensorValue> arguments = {result};
+    SmallVector<Operation*> ops;
+    for (size_t i = 0; i < arguments.size();) {
+      Operation* defOp = arguments[i].getDefiningOp();
+      if (auto op = dyn_cast_or_null<stablehlo::ClampOp>(defOp)) {
+        if (succeeded(matchRelu(op, rewriter))) {
+          arguments[i] = op.getOperand();
+          ops.push_back(op.getOperation());
+          continue;
+        }
+      }
+      if (auto op = dyn_cast_or_null<stablehlo::ConvolutionOp>(defOp)) {
+        auto layouts = matchConv(op, rewriter);
+        if (succeeded(layouts) && (!layout || layout == layouts->output)) {
+          layout = layouts->output;
+          arguments[i] = op.getLhs();
+          arguments.push_back(op.getRhs());
+          ops.push_back(op.getOperation());
+          continue;
+        }
+      }
+      ++i;
+    }
+
+    // Fail if no op was matched.
+    if (arguments.size() == 1 && arguments.front() == result) return failure();
+
+    // Create the cudnn.graph op with an empty region.
+    SymbolTable symbolTable(func->getParentOp());
+    rewriter.setInsertionPoint(func);
+    Location loc = op.getLoc();
+    auto getType = [&](TensorValue operand) -> Type {
+      return getCudnnTensorType(operand.getType(),
+                                layout.value_or(Layout::NCHW));
+    };
+    FunctionType funcType = rewriter.getFunctionType(
+        to_vector(map_range(arguments, getType)), getType(result));
+    GraphOp graph = rewriter.create<GraphOp>(loc, funcType,
+                                             /*arg_attrs=*/ArrayAttr{},
+                                             /*res_attrs=*/ArrayAttr{});
+    StringRef baseName = op->getName().getStringRef();
+    graph.setName(baseName);
+    symbolTable.insert(graph);
+
+    // Clone ops into region.
+    rewriter.setInsertionPointToStart(graph.addEntryBlock());
+    IRMapping mapping;
+    for (size_t index = 0; index < arguments.size(); ++index) {
+      Value arg = arguments[index];
+      auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+          arg.getLoc(), arg.getType(), graph.getArgument(index));
+      mapping.map(arg, castOp.getResult(0));
+    }
+    ValueRange results;
+    for (Operation* op : llvm::reverse(ops)) {
+      results = rewriter.clone(*op, mapping)->getResults();
+    }
+    auto castOp = rewriter.create<UnrealizedConversionCastOp>(
+        result.getLoc(), funcType.getResults(), results);
+    rewriter.create<ReturnOp>(loc, castOp.getResults());
+
+    // Replace root with cudnn.call op.
+    rewriter.setInsertionPoint(op);
+    auto globalHandle =
+        cudnnHandleCache->getGlobalHandle(rewriter, loc, m, baseName);
+    auto handleTy = rewriter.getType<HandleType>();
+    auto loadedHandle = rewriter.create<IREE::Util::GlobalLoadOp>(
+        loc, handleTy, globalHandle.getSymNameAttr());
+    rewriter.replaceOpWithNewOp<CallOp>(
+        op, result.getType(), graph.getName(), loadedHandle,
+        ArrayRef<Value>(arguments.begin(), arguments.size()));
+    return success();
+  }
+
+ private:
+  std::shared_ptr<CudnnHandleCache> cudnnHandleCache;
+};
+}  // namespace
+
+/// Convert HLO to CUDNN ops.
 
 static Value castToCudnnTensor(TensorValue value, Layout layout,
                                PatternRewriter& rewriter) {
@@ -359,12 +378,16 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
   return success();
 }
 
-void populateOutlineHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {
-  patterns.add(&outlineToGraph<stablehlo::ClampOp>);
-  patterns.add(&outlineToGraph<stablehlo::ConvolutionOp>);
+void populateOutlineHLOToCUDNNPatterns(RewritePatternSet& patterns) {
+  MLIRContext* ctx = patterns.getContext();
+  auto cudnnHandleCache = std::make_shared<CudnnHandleCache>();
+  patterns.add<OutlineCudnnGraphPattern<stablehlo::ClampOp>>(ctx,
+                                                             cudnnHandleCache);
+  patterns.add<OutlineCudnnGraphPattern<stablehlo::ConvolutionOp>>(
+      ctx, cudnnHandleCache);
 }
 
-void populateConvertHLOToCUDNNPatterns(mlir::RewritePatternSet& patterns) {
+void populateConvertHLOToCUDNNPatterns(RewritePatternSet& patterns) {
   patterns.add(&convertClamp);
   patterns.add(&convertConv);
 }

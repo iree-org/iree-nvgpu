@@ -25,8 +25,6 @@
 
 namespace openxla::compiler::nvgpu::cudnn {
 
-namespace {
-
 using namespace mlir;
 using namespace mlir::iree_compiler;
 
@@ -70,7 +68,8 @@ static FailureOr<Layout> getCudnnKernelLayout(int64_t inputDim,
   return failure();
 }
 
-class CUDNNHandleCache {
+namespace {
+class CudnnHandleCache {
  public:
   IREE::Util::GlobalOp getGlobalHandle(PatternRewriter& rewriter, Location loc,
                                        ModuleOp m, StringRef baseName) {
@@ -79,7 +78,7 @@ class CUDNNHandleCache {
     // Create global handle before any other initialization.
     OpBuilder::InsertionGuard g(rewriter);
     rewriter.setInsertionPointToStart(m.getBody());
-    std::string globalHandleName = (baseName + ".handle").str();
+    static constexpr char globalHandleName[] = "cudnn.shared.handle";
     auto handleTy = rewriter.getType<HandleType>();
     globalHandle = rewriter.create<IREE::Util::GlobalOp>(
         loc, globalHandleName, /*isMutable=*/false, handleTy);
@@ -98,12 +97,13 @@ class CUDNNHandleCache {
  private:
   std::optional<IREE::Util::GlobalOp> globalHandle;
 };
+}  // namespace
 
 /// Outline HLO ops into CUDNN graphs.
 
 // Returns the 'min' value of clamp 'op', if it can be converted to relu.
-FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
-                                   PatternRewriter& rewriter) {
+static FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
+                                          PatternRewriter& rewriter) {
   llvm::APFloat min = llvm::APFloat::IEEEdouble();
   if (!matchPattern(op.getMin().getDefiningOp(), m_ConstantFloat(&min))) {
     return rewriter.notifyMatchFailure(op, "expected constant min");
@@ -116,13 +116,15 @@ FailureOr<llvm::APFloat> matchRelu(stablehlo::ClampOp op,
   return min;
 }
 
+namespace {
 struct ConvLayouts {
   Layout input, kernel, output;
 };
+}  // namespace
 
 // Returns conv layouts, if it can be converted to cudnn.convolution.
-FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
-                                 PatternRewriter& rewriter) {
+static FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
+                                        PatternRewriter& rewriter) {
   if (op.getBatchGroupCount() != 1) {
     return rewriter.notifyMatchFailure(op,
                                        "expected batch_group_count to be 1");
@@ -185,11 +187,12 @@ FailureOr<ConvLayouts> matchConv(stablehlo::ConvolutionOp op,
   return {{*inputLayout, *kernelLayout, *outputLayout}};
 }
 
+namespace {
 template <typename OpTy>
-class OutlineCUDNNGraphPattern : public OpRewritePattern<OpTy> {
+class OutlineCudnnGraphPattern : public OpRewritePattern<OpTy> {
  public:
-  OutlineCUDNNGraphPattern(MLIRContext* ctx,
-                           std::shared_ptr<CUDNNHandleCache> cudnnHandleCache,
+  OutlineCudnnGraphPattern(MLIRContext* ctx,
+                           std::shared_ptr<CudnnHandleCache> cudnnHandleCache,
                            PatternBenefit benefit = 1)
       : OpRewritePattern<OpTy>(ctx, benefit),
         cudnnHandleCache(cudnnHandleCache) {}
@@ -291,8 +294,9 @@ class OutlineCUDNNGraphPattern : public OpRewritePattern<OpTy> {
   }
 
  private:
-  std::shared_ptr<CUDNNHandleCache> cudnnHandleCache;
+  std::shared_ptr<CudnnHandleCache> cudnnHandleCache;
 };
+}  // namespace
 
 /// Convert HLO to CUDNN ops.
 
@@ -373,15 +377,13 @@ static LogicalResult convertConv(stablehlo::ConvolutionOp op,
                                                           convOp.getResult());
   return success();
 }
-}  // namespace
 
 void populateOutlineHLOToCUDNNPatterns(RewritePatternSet& patterns) {
-  auto cudnnHandleCache = std::make_shared<CUDNNHandleCache>();
   MLIRContext* ctx = patterns.getContext();
-
-  patterns.add<OutlineCUDNNGraphPattern<stablehlo::ClampOp>>(ctx,
+  auto cudnnHandleCache = std::make_shared<CudnnHandleCache>();
+  patterns.add<OutlineCudnnGraphPattern<stablehlo::ClampOp>>(ctx,
                                                              cudnnHandleCache);
-  patterns.add<OutlineCUDNNGraphPattern<stablehlo::ConvolutionOp>>(
+  patterns.add<OutlineCudnnGraphPattern<stablehlo::ConvolutionOp>>(
       ctx, cudnnHandleCache);
 }
 

@@ -23,6 +23,19 @@ def OutlineTritonCalls :
 
   let dependentDialects = [
     "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
+  ];
+}
+
+def RefineTritonAbi :
+    Pass<"openxla-nvgpu-refine-triton-abi", "mlir::ModuleOp"> {
+  let summary = "Refines Triton executables ABI to be compatible with IREE";
+
+  let constructor = [{
+    openxla::compiler::nvgpu::tritonflow::createRefineTritonAbi()
+  }];
+
+  let dependentDialects = [
+    "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
     "mlir::iree_compiler::IREE::HAL::HALDialect",
   ];
 }

@@ -42,6 +42,7 @@ iree_cc_library(
     "ConvertTritonToFlowDispatch.cpp"
     "OutlineTritonCalls.cpp"
     "Passes.cpp"
+    "RefineTritonAbi.cpp"
   DEPS
     ::PassHeaders
     MLIRPass

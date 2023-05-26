@@ -301,7 +301,7 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // Check that Triton function is compatible with the dispatch arguments.
   if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),
                                   getArguments(), getResults(),
-                                  exportOp.getLayout()))) {
+                                  exportOp.getLayout().value_or(nullptr)))) {
     return failure();
   }
 

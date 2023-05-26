@@ -119,13 +119,13 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
     OptionalAttr<StrAttr>:$sym_visibility,
     SymbolNameAttr:$sym_name,
     FlatSymbolRefAttr:$function_ref,
-    HAL_PipelineLayoutAttr:$layout
+    OptionalAttr<HAL_PipelineLayoutAttr>:$layout
   );
 
   let assemblyFormat = [{
     custom<SymbolVisibility>($sym_visibility)
     custom<SymbolAlias>($sym_name, $function_ref)
-    `layout` `(` $layout `)`
+    (`layout` `(` $layout^ `)` )?
     attr-dict-with-keyword
   }];
 
@@ -133,7 +133,7 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
     OpBuilder<(ins
       "llvm::StringRef":$sym_name,
       "mlir::FlatSymbolRefAttr":$function_ref,
-      "mlir::iree_compiler::IREE::HAL::PipelineLayoutAttr":$layout)>,
+      CArg<"mlir::iree_compiler::IREE::HAL::PipelineLayoutAttr", "nullptr">:$layout)>,
   ];
 }
 

@@ -6,6 +6,8 @@
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 
+#include <functional>
+
 #include "iree/compiler/Dialect/HAL/IR/HALTypes.h"
 #include "iree/compiler/Dialect/Util/IR/UtilOps.h"
 #include "llvm/ADT/STLExtras.h"
@@ -19,6 +21,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/Types.h"
+#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LogicalResult.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
@@ -54,8 +57,8 @@ static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
   for (auto pair : llvm::enumerate(llvm::zip_equal(tritonArgs, args))) {
     auto [tritonArgType, argType] = pair.value();
 
-    int64_t index = offset + pair.index();
     int64_t tritonIndex = tritonOffset + pair.index();
+    int64_t index = offset + pair.index();
 
     // Pointer arguments must be passed as tensors.
     if (auto ptr = tritonArgType.dyn_cast<triton::PointerType>()) {
@@ -88,21 +91,21 @@ static LogicalResult verifyArgumentTypes(Operation *op, TypeRange tritonArgs,
 
 static LogicalResult verifyResultTypes(Operation *op, TypeRange tritonRets,
                                        int64_t tritonOffset, TypeRange rets,
-                                       size_t offset = 0) {
+                                       ArrayRef<int64_t> retIdxs) {
   for (auto pair : llvm::enumerate(llvm::zip_equal(tritonRets, rets))) {
-    auto [tritonArgType, argType] = pair.value();
+    auto [tritonRetType, retType] = pair.value();
 
-    int64_t index = offset + pair.index();
     int64_t tritonIndex = tritonOffset + pair.index();
+    int64_t index = retIdxs[pair.index()];
 
     // Results passed to Triton kernels as destination buffers.
-    if (auto ptr = tritonArgType.dyn_cast<triton::PointerType>()) {
-      auto tensor = argType.dyn_cast<RankedTensorType>();
+    if (auto ptr = tritonRetType.dyn_cast<triton::PointerType>()) {
+      auto tensor = retType.dyn_cast<RankedTensorType>();
       if (!tensor)
         return op->emitOpError()
                << "result #" << index
                << " must be a tensor matching Triton pointer type at #"
-               << tritonIndex << " (" << argType << " vs " << ptr << ")";
+               << tritonIndex << " (" << retType << " vs " << ptr << ")";
 
       if (ptr.getPointeeType() != tensor.getElementType())
         return op->emitOpError()
@@ -117,15 +120,25 @@ static LogicalResult verifyResultTypes(Operation *op, TypeRange tritonRets,
 }
 
 static LogicalResult verifyTritonFunction(
-    Operation *op, FunctionType tritonFunctionType, TypeRange args,
-    TypeRange rets, IREE::HAL::PipelineLayoutAttr layout = {}) {
+    Operation *op, FunctionType tritonFunctionType, ValueRange args,
+    ValueRange rets, IREE::HAL::PipelineLayoutAttr layout = {}) {
   // We don't expect Triton functions returning any results at all.
   if (tritonFunctionType.getNumResults() != 0) {
     return op->emitOpError() << "expected triton function with no results";
   }
 
+  // All triton call-like operation use tied results.
+  auto tiedOp = cast<IREE::Util::TiedOpInterface>(op);
+  auto isTiedResult = [&](Value result) {
+    return tiedOp.getTiedResultOperand(result);
+  };
+
+  // Number of result tensors tied to one of the arguments.
+  size_t numTiedResults = llvm::count_if(rets, isTiedResult);
+  size_t numUntiedResults = llvm::count_if(rets, std::not_fn(isTiedResult));
+
   // Triton functions use "destination-passing style" for buffer outputs.
-  size_t expectedTritonArgs = args.size() + rets.size();
+  size_t expectedTritonArgs = args.size() + rets.size() - numTiedResults;
   if (tritonFunctionType.getNumInputs() != expectedTritonArgs) {
     return op->emitOpError()
            << "expected triton function with " << expectedTritonArgs
@@ -135,14 +148,25 @@ static LogicalResult verifyTritonFunction(
 
   auto tritonInputs = tritonFunctionType.getInputs();
 
+  // Collect results that are not tied to arguments, we'll need them later to
+  // check against triton function type.
+  SmallVector<Type> untiedRets;
+  SmallVector<int64_t> untiedIdxs;
+  for (auto indexed : llvm::enumerate(rets)) {
+    if (isTiedResult(indexed.value())) continue;
+    untiedRets.push_back(indexed.value().getType());
+    untiedIdxs.push_back(indexed.index());
+  }
+
   if (!layout) {
     // If we do not have a layout, we should check Triton function signature
     // directly against the call operation arguments and results.
     auto tritonArgs = tritonInputs.take_front(args.size());
     auto tritonRets = tritonInputs.drop_front(args.size());
 
-    if (failed(verifyArgumentTypes(op, tritonArgs, 0, args)) ||
-        failed(verifyResultTypes(op, tritonRets, args.size(), rets)))
+    if (failed(verifyArgumentTypes(op, tritonArgs, /*tritonOffset=*/0, args)) ||
+        failed(verifyResultTypes(op, tritonRets, /*tritonOffset=*/args.size(),
+                                 untiedRets, /*retIdxs=*/untiedIdxs)))
       return failure();
 
   } else {
@@ -151,27 +175,28 @@ static LogicalResult verifyTritonFunction(
     auto numConstants = layout.getPushConstants();
     auto numBindings = layout.getSetLayouts().front().getBindings().size();
 
-    auto numBufArgs = numBindings - rets.size();
+    auto numPtrArgs = numBindings - numUntiedResults;
 
-    {  // Check buffer arguments.
-      auto bufs0 = tritonInputs.take_front(numBufArgs);
-      auto bufs1 = args.take_front(bufs0.size());
-      if (failed(verifyArgumentTypes(op, bufs0, /*tritonOffset=*/0, bufs1)))
+    {  // Check pointer arguments (passed as tensors)
+      auto ptrs0 = tritonInputs.take_front(numPtrArgs);
+      auto ptrs1 = args.take_front(ptrs0.size());
+      if (failed(verifyArgumentTypes(op, ptrs0, /*tritonOffset=*/0, ptrs1)))
         return failure();
     }
 
-    {  // Check constant (scalar) arguments.
+    {  // Check constant arguments (passed as scalar values)
       auto csts0 = tritonInputs.drop_front(numBindings);
-      auto csts1 = args.drop_front(numBufArgs).take_front(numConstants);
+      auto csts1 = args.drop_front(numPtrArgs).take_front(numConstants);
       if (failed(verifyArgumentTypes(op, csts0, /*tritonOffset=*/numBindings,
-                                     csts1, /*offset=*/numBufArgs)))
+                                     csts1, /*offset=*/numPtrArgs)))
         return failure();
     }
 
-    {  // Check results (result buffer destinations).
-      auto rets0 = tritonInputs.drop_front(numBufArgs).take_front(rets.size());
-      if (failed(verifyResultTypes(op, rets0,
-                                   /*tritonOffset=*/numBufArgs, rets)))
+    {  // Check results (defined as tensor results)
+      auto rets0 =
+          tritonInputs.drop_front(numPtrArgs).take_front(numUntiedResults);
+      if (failed(verifyResultTypes(op, rets0, /*tritonOffset=*/numPtrArgs,
+                                   untiedRets, /*retIdxs=*/untiedIdxs)))
         return failure();
     }
   }
@@ -273,9 +298,9 @@ LogicalResult DispatchOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   // so it only means that it was already lowered to LLVM and we skip verifier.
   if (!tritonFunc) return success();
 
-  // Check that Triton function is compatible with the call arguments.
+  // Check that Triton function is compatible with the dispatch arguments.
   if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),
-                                  getArguments().getTypes(), getResultTypes(),
+                                  getArguments(), getResults(),
                                   exportOp.getLayout()))) {
     return failure();
   }
@@ -324,8 +349,7 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
 
   // Check that Triton function is compatible with the call arguments.
   if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),
-                                  getArguments().getTypes(),
-                                  getResultTypes()))) {
+                                  getArguments(), getResults()))) {
     return failure();
   }
 

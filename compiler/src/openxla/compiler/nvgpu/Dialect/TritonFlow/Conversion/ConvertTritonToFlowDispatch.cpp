@@ -188,27 +188,45 @@ static FailureOr<std::string> compileTritonFunctionToPTX(
 
 using llvm::sys::fs::TempFile;
 
-struct ConvertTritonFlowCallOp
-    : public OpConversionPattern<tritonflow::CallOp> {
+struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      tritonflow::CallOp op, OpAdaptor adaptor,
+      DispatchOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     MLIRContext *ctx = getContext();
 
-    // TODO(ezhulenev): Should options be configured at a function level?
+    // TODO(ezhulenev): Pass options to the pattern constructor. Also some
+    // options should become triton executable attributes.
     auto opts = TritonOptions::FromFlags::get();
 
     // TODO(ezhulenev): This is a performance footgun, fix it!
-    SymbolTable sym_table(op->getParentOfType<ModuleOp>());
-    auto fn = sym_table.lookupNearestSymbolFrom<FuncOp>(op, op.getCalleeAttr());
+    SymbolTable symTable(op->getParentOfType<ModuleOp>());
+
+    // Find the Triton export declaration corresponding to dispatch operation.
+    auto exportOp = symTable.lookupNearestSymbolFrom<ExecutableExportOp>(
+        op, op.getEntryPoint());
+
+    // Export declaration should define the Triton function layout (IREE ABI).
+    if (!exportOp.getLayout().has_value())
+      return rewriter.notifyMatchFailure(
+          op, "export declaration must have a layout attribute");
+
+    // Find the exported function in the Triton executable inner module.
+    auto executable = exportOp.getExecutable();
+    auto callee = symTable.lookupNearestSymbolFrom<FuncOp>(
+        executable.getInnerModule(), exportOp.getFunctionRefAttr());
+
+    // Check that exported function was not already lowered.
+    if (!callee)
+      return rewriter.notifyMatchFailure(
+          op, "export declaration must reference a Triton function");
 
     // Get a PTX module from the Triton callee.
-    FailureOr<std::string> ptx = compileTritonFunctionToPTX(fn, opts);
+    FailureOr<std::string> ptx = compileTritonFunctionToPTX(callee, opts);
     if (failed(ptx))
       return rewriter.notifyMatchFailure(
-          op, "Failed to lower Triton function to LLVM IR");
+          op, "failed to lower Triton function to LLVM IR");
 
     // TODO(ezhulenev): Executable object supports `data` attribute, check if
     // it works for embedding Triton PTX.
@@ -216,7 +234,7 @@ struct ConvertTritonFlowCallOp
     // Write PTX to a temp file, so that we can constuct an HAL executable.
     SmallVector<char, 128> tmpPath;
     llvm::sys::path::system_temp_directory(/*erasedOnReboot=*/true, tmpPath);
-    llvm::sys::path::append(tmpPath, fn.getSymName() + ".executable.%%%%%.ptx");
+    llvm::sys::path::append(tmpPath, executable.getSymName() + ".%%%%%.ptx");
     llvm::Expected<TempFile> tmpFile = TempFile::create(tmpPath);
     if (!tmpFile)
       return rewriter.notifyMatchFailure(
@@ -236,12 +254,12 @@ struct ConvertTritonFlowCallOp
           op, "Could not keep a temporary file with PTX blob");
 
     // Create `hal.executable.source` operation holding executable object (PTX).
-    ImplicitLocOpBuilder b(fn->getLoc(), rewriter);
-    b.setInsertionPointAfter(fn);
+    ImplicitLocOpBuilder b(executable->getLoc(), rewriter);
+    b.setInsertionPointAfter(executable);
 
     auto executableSource = b.create<IREE::HAL::ExecutableSourceOp>(
-        b.getStringAttr("private"),
-        b.getStringAttr(fn.getSymName() + ".executable"), executableObjects);
+        b.getStringAttr("private"), b.getStringAttr(executable.getSymName()),
+        executableObjects);
 
     // TODO(ezhulenev): This us hardcoded for the block size used by the Triton
     // kernel. We have to infer this from the Triton kernel definition.
@@ -250,8 +268,8 @@ struct ConvertTritonFlowCallOp
     // Create `hal.executable.export` operation to export Triton entrypoint.
     b.setInsertionPointToStart(&executableSource.getBody().emplaceBlock());
     auto executableExport = b.create<IREE::HAL::ExecutableExportOp>(
-        fn.getSymNameAttr(),
-        /*ordinal=*/b.getIndexAttr(0), getPipelineLayout(ctx), workgroups,
+        exportOp.getSymNameAttr(),
+        /*ordinal=*/b.getIndexAttr(0), exportOp.getLayoutAttr(), workgroups,
         /*subgroup_size=*/IntegerAttr(),
         /*workgroup_local_memory=*/IntegerAttr());
     b.create<IREE::HAL::ExecutableSourceEndOp>();
@@ -267,8 +285,8 @@ struct ConvertTritonFlowCallOp
         adaptor.getArgumentDims(), adaptor.getTiedOperands().value_or(nullptr));
 
     // TODO(ezhulenev): It is not safe in general, but currently we assume that
-    // we have 1-to-1 mapping between Triton dispatch and Triton function.
-    rewriter.eraseOp(fn);
+    // we have 1-to-1 mapping between Triton dispatch and Triton executable.
+    rewriter.eraseOp(executable);
 
     return success();
   }
@@ -317,31 +335,6 @@ struct ConvertTritonFlowCallOp
         b.getContext(), b.getArrayAttr(target),
         b.getArrayAttr(b.getArrayAttr(executable)));
   }
-
-  // TODO(ezhulenev): This pipeline layout is hardcoded for an `add_kernel`
-  // triton kernel. We have to infer it from the original Triton function
-  // signature.
-  IREE::HAL::PipelineLayoutAttr getPipelineLayout(MLIRContext *ctx) const {
-    Builder b(ctx);
-
-    auto binding0 = IREE::HAL::DescriptorSetBindingAttr::get(
-        ctx, /*ordinal=*/0, IREE::HAL::DescriptorType::StorageBuffer,
-        IREE::HAL::DescriptorFlags::ReadOnly);
-
-    auto binding1 = IREE::HAL::DescriptorSetBindingAttr::get(
-        ctx, /*ordinal=*/1, IREE::HAL::DescriptorType::StorageBuffer,
-        IREE::HAL::DescriptorFlags::ReadOnly);
-
-    auto binding2 = IREE::HAL::DescriptorSetBindingAttr::get(
-        ctx, /*ordinal=*/2, IREE::HAL::DescriptorType::StorageBuffer,
-        std::nullopt);
-
-    auto descriptorSetLayout = IREE::HAL::DescriptorSetLayoutAttr::get(
-        ctx, /*ordinal=*/0, {binding0, binding1, binding2});
-
-    return IREE::HAL::PipelineLayoutAttr::get(ctx, /*pushConstants=*/1,
-                                              descriptorSetLayout);
-  }
 };
 
 }  // namespace
@@ -349,7 +342,7 @@ struct ConvertTritonFlowCallOp
 void populateTritonToFlowDispatchPatterns(TypeConverter &typeConverter,
                                           RewritePatternSet &patterns) {
   MLIRContext *ctx = patterns.getContext();
-  patterns.insert<ConvertTritonFlowCallOp>(typeConverter, ctx);
+  patterns.insert<ConvertTritonFlowDispatchOp>(typeConverter, ctx);
 }
 
 }  // namespace openxla::compiler::nvgpu::tritonflow

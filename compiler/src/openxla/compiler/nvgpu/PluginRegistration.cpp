@@ -64,6 +64,8 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
   }
 
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    pm.addPass(createOutlineTritonCallsPass());
+    pm.addPass(createRefineTritonAbi());
     pm.addPass(createConvertTritonToFlowDispatchPass());
   }
 };

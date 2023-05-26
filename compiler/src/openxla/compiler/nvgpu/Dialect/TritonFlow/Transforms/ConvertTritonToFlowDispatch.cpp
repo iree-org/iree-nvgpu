@@ -9,6 +9,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/PassDetail.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
 
@@ -32,9 +33,9 @@ class ConvertTritonToFlowDispatch
     TypeConverter typeConverter;
     typeConverter.addConversion([](Type type) { return type; });
 
-    // Ensure all TritonFlow operations go away.
+    // Ensure all TritonFlow dispatches go away.
     ConversionTarget conversionTarget(*context);
-    conversionTarget.addIllegalDialect<TritonFlowDialect>();
+    conversionTarget.addIllegalOp<DispatchOp>();
     conversionTarget.addLegalDialect<IREE::HAL::HALDialect>();
     conversionTarget.addLegalDialect<IREE::Flow::FlowDialect>();
 

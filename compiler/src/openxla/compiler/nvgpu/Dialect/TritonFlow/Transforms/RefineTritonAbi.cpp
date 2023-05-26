@@ -195,9 +195,8 @@ static void refineTritonAbi(DispatchOp dispatch, SymbolTable& symTable) {
   assert(!exportOp.getLayout().has_value() && "layout already defined");
 
   // Find the exported function in the inner module.
-  auto innerModule = exportOp.getParentOp<ExecutableOp>().getInnerModule();
   auto callee = symTable.lookupNearestSymbolFrom<triton::FuncOp>(
-      innerModule, exportOp.getFunctionRefAttr());
+      exportOp.getExecutable().getInnerModule(), exportOp.getFunctionRefAttr());
   assert(callee && "callee must be a Triton function");
 
   // Update Triton function and a dispatch operation to be ABI compatible.

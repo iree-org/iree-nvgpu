@@ -14,6 +14,8 @@
 
 namespace openxla::compiler::nvgpu::tritonflow {
 
+// TODO(ezhulenev): TritonOptions should be added to the Triton plugin
+// registration (see PluginRegistration.cpp).
 struct TritonOptions {
   // TODO(ezhulenev): This is a very old compute capability version that happens
   // to work on P100 GPUs attached to ezhulenev@ desktop. We have to target 7.0+
@@ -42,7 +44,7 @@ void populateTritonToFlowDispatchPatterns(mlir::TypeConverter &typeConverter,
                                           mlir::RewritePatternSet &patterns);
 
 // Build a compilation pipeline that lowers from Triton IR to LLVM. This is an
-// implentation details of the Triton to OpenXLA Triton runtime lowering and
+// implementation details of the Triton to OpenXLA Triton runtime lowering and
 // exposed only for testing it in isolation.
 void buildTritonCompilationPipeline(mlir::OpPassManager &pm,
                                     const TritonOptions &opts);

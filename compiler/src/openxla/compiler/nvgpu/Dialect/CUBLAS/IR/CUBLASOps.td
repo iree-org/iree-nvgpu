@@ -67,8 +67,10 @@ def CUBLAS_GemmOp : CUBLAS_Op<"gemm", [
 
   let arguments = (ins
     Variadic<CUBLAS_Tensor2D>:$arguments,
-    DefaultValuedOptionalAttr<CUBLAS_OperationAttr, "CublasOperation::N">:$transa,
-    DefaultValuedOptionalAttr<CUBLAS_OperationAttr, "CublasOperation::N">:$transb,
+    DefaultValuedOptionalAttr<CUBLAS_OperationAttr,
+        "CublasOperation::N">:$transa,
+    DefaultValuedOptionalAttr<CUBLAS_OperationAttr,
+        "CublasOperation::N">:$transb,
     DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha,
     DefaultValuedOptionalAttr<F32Attr, "0.0f">:$beta,
     OptionalAttr<CUBLAS_GemmAlgoAttr>:$algo,

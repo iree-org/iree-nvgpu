@@ -136,3 +136,80 @@ func.func @test_graph(
 // CHECK:          %[[STABLEHLO_1:.*]].clamp.handle = util.global.load @stablehlo.clamp.handle
 // CHECK:          %[[CALL_1:.*]] = cudnn.call handle(%[[STABLEHLO_1]].clamp.handle) @stablehlo.clamp(%[[ARG0_1]], %[[ARG1_0]])
 // CHECK:          return %[[CALL_1]]
+
+// -----
+
+func.func @multi_conv(%input : tensor<100x26x26x32xf32>,
+    %filter : tensor<32x3x3x32xf32>) -> tensor<100x26x26x32xf32> {
+  %conv_0 = "stablehlo.convolution"(%input, %filter) {
+      batch_group_count = 1 : i64,
+      dimension_numbers = #stablehlo.conv<raw
+        input_batch_dimension = 0,
+        input_feature_dimension = 3,
+        input_spatial_dimensions = [1, 2],
+        kernel_input_feature_dimension = 3,
+        kernel_output_feature_dimension = 0,
+        kernel_spatial_dimensions = [1, 2],
+        output_batch_dimension = 0,
+        output_feature_dimension = 3,
+        output_spatial_dimensions = [1, 2]>,
+      feature_group_count = 1 : i64,
+      lhs_dilation = dense<1> : tensor<2xi64>,
+      padding = dense<1> : tensor<2x2xi64>,
+      rhs_dilation = dense<1> : tensor<2xi64>,
+      window_strides = dense<1> : tensor<2xi64>}
+      : (tensor<100x26x26x32xf32>, tensor<32x3x3x32xf32>)
+      -> tensor<100x26x26x32xf32>
+  %conv_1 = "stablehlo.convolution"(%conv_0, %filter) {
+      batch_group_count = 1 : i64,
+      dimension_numbers = #stablehlo.conv<raw
+        input_batch_dimension = 0,
+        input_feature_dimension = 3,
+        input_spatial_dimensions = [1, 2],
+        kernel_input_feature_dimension = 3,
+        kernel_output_feature_dimension = 0,
+        kernel_spatial_dimensions = [1, 2],
+        output_batch_dimension = 0,
+        output_feature_dimension = 3,
+        output_spatial_dimensions = [1, 2]>,
+      feature_group_count = 1 : i64,
+      lhs_dilation = dense<1> : tensor<2xi64>,
+      padding = dense<1> : tensor<2x2xi64>,
+      rhs_dilation = dense<1> : tensor<2xi64>,
+      window_strides = dense<1> : tensor<2xi64>}
+      : (tensor<100x26x26x32xf32>, tensor<32x3x3x32xf32>)
+      -> tensor<100x26x26x32xf32>
+  func.return %conv_1 : tensor<100x26x26x32xf32>
+}
+
+// CHECK:      util.global public @stablehlo.convolution.handle
+// CHECK:      util.initializer
+// CHECK:        %[[DEVICE:.*]] = hal.ex.shared_device
+// CHECK:        %[[HANDLE:.*]] = cudnn.handle(%[[DEVICE]])
+// CHECK:        util.global.store %[[HANDLE]], @stablehlo.convolution.handle
+// CHECK:        util.initializer.return
+
+// CHECK:      cudnn.graph @stablehlo.convolution(%[[ARG0:.*]]: !cudnn.tensor<100x32x26x26xf32, NHWC>, %[[ARG1:.*]]: !cudnn.tensor<32x32x3x3xf32, NHWC>, %[[ARG2:.*]]: !cudnn.tensor<32x32x3x3xf32, NHWC>)
+// CHECK-SAME:     -> !cudnn.tensor<100x32x26x26xf32, NHWC>
+// CHECK:        %[[CONVOLUTION:.*]] = cudnn.convolution(%[[ARG0]], %[[ARG2]])
+// CHECK-SAME:       alpha = 1.000000e+00
+// CHECK-SAME:       beta = 0.000000e+00
+// CHECK-SAME:       spatial_dim_count = 2
+// CHECK-SAME:       spatial_stride = [1, 1]
+// CHECK-SAME:       pre_padding = [1, 1]
+// CHECK-SAME:       post_padding = [1, 1]
+// CHECK-SAME:       dilation = [1, 1]
+// CHECK:        %[[CONVOLUTION_0:.*]] = cudnn.convolution(%[[CONVOLUTION]], %[[ARG2]])
+// CHECK-SAME:       alpha = 1.000000e+00
+// CHECK-SAME:       beta = 0.000000e+00
+// CHECK-SAME:       spatial_dim_count = 2
+// CHECK-SAME:       spatial_stride = [1, 1]
+// CHECK-SAME:       pre_padding = [1, 1]
+// CHECK-SAME:       post_padding = [1, 1]
+// CHECK-SAME:       dilation = [1, 1]
+// CHECK:        cudnn.return %[[CONVOLUTION_0]]
+
+// CHECK:      @multi_conv(%[[ARG0]]: tensor<100x26x26x32xf32>, %[[ARG1]]: tensor<32x3x3x32xf32>)
+// CHECK:        %[[STABLEHLO:.*]].convolution.handle = util.global.load @stablehlo.convolution.handle
+// CHECK:        %[[CALL:.*]] = cudnn.call handle(%[[STABLEHLO]].convolution.handle) @stablehlo.convolution(%[[ARG0]], %[[ARG1]], %[[ARG1]])
+// CHECK:        return %[[CALL]]

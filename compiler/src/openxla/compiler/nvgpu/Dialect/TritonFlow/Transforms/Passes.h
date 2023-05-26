@@ -20,6 +20,8 @@ namespace openxla::compiler::nvgpu::tritonflow {
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
 createOutlineTritonCallsPass();
 
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createRefineTritonAbi();
+
 //===----------------------------------------------------------------------===//
 // Conversions from TritonFlow dialect
 //===----------------------------------------------------------------------===//

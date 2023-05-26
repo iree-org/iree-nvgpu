@@ -15,6 +15,7 @@ iree_lit_test_suite(
     lit
   SRCS
     "outline_triton_calls.mlir"
+    "refine_triton_abi.mlir"
     "triton_to_flow_dispatch.mlir"
   TOOLS
     FileCheck

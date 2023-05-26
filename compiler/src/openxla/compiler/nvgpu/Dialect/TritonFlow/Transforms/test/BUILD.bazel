@@ -17,6 +17,7 @@ iree_lit_test_suite(
     srcs = enforce_glob(
         [
             "outline_triton_calls.mlir",
+            "refine_triton_abi.mlir",
             "triton_to_flow_dispatch.mlir",
         ],
         include = ["*.mlir"],

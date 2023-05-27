@@ -44,7 +44,7 @@ jobs:
           python ./sync_deps.py --depth 1 --submodules-depth 1
       - name: Build and test
         run: |
-          ../iree/build_tools/github_actions/docker_run.sh \
+          ../iree/build_tools/docker/docker_run.sh \
             $(python ../iree/build_tools/docker/get_image_name.py nvidia) \
             ./build_tools/cmake/build_test_all_no_device.sh \
             $PWD/build

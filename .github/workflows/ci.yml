@@ -51,11 +51,15 @@ jobs:
           # First checkout without expensive submodules.
           # TODO: Move docker management to a dependency repo that we can
           # get at the beginning of time.
+          # TODO: There is a bug in sync_deps.py where it fetches all submodules
+          # if the regex excludes them all.
+          # TODO: It would be nice to only sync requested dep for a case like
+          # this.
           python ./sync_deps.py --exclude-submodule "iree:third_party/(llvm|mlir-hlo)"
           # Cache the docker image in the background before expensive submodule
           # checkout.
           echo "Pulling docker image in the background"
-          docker image pull $(python ../iree/build_tools/docker/get_image_name.py nvidia) &
+          docker image pull $(python ../iree/build_tools/docker/get_image_name.py base) &
           python ./sync_deps.py --depth 1 --submodules-depth 1
           echo "Waiting for docker pull"
           wait
@@ -67,9 +71,11 @@ jobs:
           #   /work/openxla-nvgpu/iree
           # So we need to actually mount the parent directory when launching
           # in docker and then use relative paths into this project.
+          # TODO: Get an nvidia image with CUDNN installed. For now, the base
+          # image has enough of the SDK to build everything else.
           export DOCKER_HOST_WORKDIR="${GITHUB_WORKSPACE}/.."
           export DOCKER_HOST_TMPDIR="${RUNNER_TEMP}"
           ../iree/build_tools/docker/docker_run.sh \
-            $(python ../iree/build_tools/docker/get_image_name.py nvidia) \
+            $(python ../iree/build_tools/docker/get_image_name.py base) \
             ./openxla-nvgpu/build_tools/cmake/build_test_all_no_device.sh \
               ./openxla-nvgpu ./build

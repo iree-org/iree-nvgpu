@@ -19,7 +19,7 @@ CMAKE_BIN="${CMAKE_BIN:-$(which cmake)}"
 ninja --version
 python3 --version
 echo "Current directory: ${PWD}"
-ls -l
+export CTEST_PARALLEL_LEVEL="$(nproc)"
 
 declare -a CMAKE_ARGS=(
   "-G" "Ninja"

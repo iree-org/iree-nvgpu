@@ -29,7 +29,14 @@ concurrency:
 # Jobs are organized into groups and topologically sorted by dependencies
 jobs:
   build_test_all_no_device:
+    # TODO: Enable ci setup and use custom runners.
     runs-on: ubuntu-20.04-64core
+    # runs-on:
+    #   - self-hosted # must come first
+    #   - runner-group=${{ inputs.runner-group }}
+    #   - environment=${{ inputs.runner-env }}
+    #   - cpu
+    #   - os-family=Linux
     steps:
       - name: "Checking out repository"
         uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3.3.0

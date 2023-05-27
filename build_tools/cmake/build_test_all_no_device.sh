@@ -26,6 +26,10 @@ declare -a CMAKE_ARGS=(
 
   # Disable device tests.
   "-DOPENXLA_NVGPU_INCLUDE_DEVICE_TESTS=OFF"
+
+  # Disable CUDNN runtime component for now.
+  # TODO: Figure out how to get CUDNN in the docker containers and enable.
+  "-DOPENXLA_NVGPU_BUILD_RUNTIME_CUDNN=OFF"
 )
 
 "$CMAKE_BIN" "${CMAKE_ARGS[@]}"

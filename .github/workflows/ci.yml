@@ -51,7 +51,7 @@ jobs:
           # First checkout without expensive submodules.
           # TODO: Move docker management to a dependency repo that we can
           # get at the beginning of time.
-          python ./sync_deps.py --exclude-submodule "."
+          python ./sync_deps.py --exclude-submodule "iree:third_party/(llvm|mlir-hlo)"
           # Cache the docker image in the background before expensive submodule
           # checkout.
           echo "Pulling docker image in the background"

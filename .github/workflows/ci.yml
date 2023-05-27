@@ -14,6 +14,10 @@ name: CI
 
 on:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
 
 concurrency:
   # A PR number if a pull request and otherwise the commit hash. This cancels
@@ -38,7 +42,7 @@ jobs:
       - name: Sync source deps
         run: |
           python ./sync_deps.py --depth 1 --submodules-depth 1
-      - name:
+      - name: Build and test
         run: |
           ../iree/build_tools/github_actions/docker_run.sh \
             $(python ../iree/build_tools/docker/get_image_name.py gcr.io/iree-oss/nvidia) \

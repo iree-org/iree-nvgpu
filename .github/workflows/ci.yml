@@ -61,6 +61,12 @@ jobs:
           wait
       - name: Build and test
         run: |
+          # We are checked out to something like:
+          #   /work/openxla-nvgpu/openxla-nvgpu
+          # Our deps are synced to:
+          #   /work/openxla-nvgpu/iree
+          # So we need to actually mount the parent directory when launching
+          # in docker and then use relative paths into this project.
           export DOCKER_HOST_WORKDIR="${GITHUB_WORKSPACE}/.."
           export DOCKER_HOST_TMPDIR="${RUNNER_TEMP}"
           ../iree/build_tools/docker/docker_run.sh \

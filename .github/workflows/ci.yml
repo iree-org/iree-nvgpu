@@ -48,8 +48,14 @@ jobs:
           python-version: "3.10"
       - name: Sync source deps
         run: |
-          # Cache the docker image in the background during checkout.
-          docker image pull  $(python ../iree/build_tools/docker/get_image_name.py nvidia) &
+          # First checkout without expensive submodules.
+          # TODO: Move docker management to a dependency repo that we can
+          # get at the beginning of time.
+          python ./sync_deps.py --exclude-submodule "."
+          # Cache the docker image in the background before expensive submodule
+          # checkout.
+          echo "Pulling docker image in the background"
+          docker image pull $(python ../iree/build_tools/docker/get_image_name.py nvidia) &
           python ./sync_deps.py --depth 1 --submodules-depth 1
           wait
       - name: Build and test

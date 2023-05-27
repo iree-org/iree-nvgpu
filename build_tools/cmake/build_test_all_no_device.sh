@@ -24,7 +24,7 @@ ls -l
 declare -a CMAKE_ARGS=(
   "-G" "Ninja"
   "-B" "${BUILD_DIR}"
-  "-S" "$PWD/openxla-nvgpu"
+  "-S" "${SOURCE_DIR}"
 
   "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
   "-DIREE_ENABLE_ASSERTIONS=${ENABLE_ASSERTIONS}"

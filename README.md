@@ -23,8 +23,11 @@ cmake -GNinja -B build/ -S . \
 ```
 
 Note that you will need a check-out of the IREE codebase in `../iree` relative
-to the directory where the `openxla-nvgpu` compiler was checked out. Refer to
-the IREE [getting
+to the directory where the `openxla-nvgpu` compiler was checked out. Running
+the `sync_deps.py` script should bring in all source dependencies at needed
+versions (into the parent directory).
+
+Additional options for configuring IREE are in the IREE [getting
 started](https://openxla.github.io/iree/building-from-source/getting-started/)
 guide for details of how to set this up.
 
@@ -33,20 +36,25 @@ guide for details of how to set this up.
 You must have a CUDA Toolkit installed together with a cuDNN ([see
 instructions](https://docs.nvidia.com/deeplearning/cudnn/install-guide/index.html#installlinux-tar)).
 
+See the project settings for options to build without components requiring
+full dependencies.
+
 On Linux platform path to `libcudnn.so` should be added to `LD_LIBRARY_PATH`.
 
 ```
 export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:/usr/local/cuda/lib64
 ```
 
-## Running cuDNN runtime tests
+## Running tests
 
 Some of the tests can run only on an Ampere+ devices because they rely on the
 [cuDNN runtime fusion engine](https://docs.nvidia.com/deeplearning/cudnn/developer-guide/index.html#runtime-fusion-engine).
 
+Tests that depend on having a device present can be disabled with
+`-DOPENXLA_NVGPU_INCLUDE_DEVICE_TESTS=OFF`.
+
 ```
-cmake --build build
-ctest --test-dir build -R openxla/runtime/nvgpu/cudnn/test/
+cmake --build build --target openxla-nvgpu-run-tests
 ```
 
 ## Project Maintenance

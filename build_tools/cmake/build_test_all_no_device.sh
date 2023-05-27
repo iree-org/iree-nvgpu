@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Copyright 2019 The IREE Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+# Build and run tests that do not rely on a device being present.
+
+set -xeuo pipefail
+
+BUILD_DIR="${1:-${IREE_BUILD_DIR:-build}}"
+CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-RelWithDebInfo}"
+ENABLE_ASSERTIONS="${ENABLE_ASSERTIONS:-ON}"
+
+declare -a CMAKE_ARGS=(
+  "-G" "Ninja"
+  "-B" "${BUILD_DIR}"
+
+  "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
+  "-DIREE_ENABLE_ASSERTIONS=${ENABLE_ASSERTIONS}"
+
+  # Use `lld` for faster linking.
+  "-DIREE_ENABLE_LLD=ON"
+
+  # Disable device tests.
+  "-DOPENXLA_NVGPU_INCLUDE_DEVICE_TESTS=OFF"
+)
+
+"$CMAKE_BIN" "${CMAKE_ARGS[@]}"
+
+# We first run all tests, which implicitly builds needed deps.
+# That way, we know that the test deps are declared properly.
+echo "Building openxla-nvgpu-run-tests"
+echo "--------------------------------"
+"$CMAKE_BIN" --build "${BUILD_DIR}" --target openxla-nvgpu-run-tests -- -k 0
+
+# Then followup with building all.
+echo "Building all"
+echo "------------"
+"$CMAKE_BIN" --build "${BUILD_DIR}" -- -k 0

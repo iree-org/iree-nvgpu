@@ -57,6 +57,7 @@ jobs:
           echo "Pulling docker image in the background"
           docker image pull $(python ../iree/build_tools/docker/get_image_name.py nvidia) &
           python ./sync_deps.py --depth 1 --submodules-depth 1
+          echo "Waiting for docker pull"
           wait
       - name: Build and test
         run: |
@@ -64,5 +65,5 @@ jobs:
           export DOCKER_HOST_TMPDIR="${RUNNER_TEMP}"
           ../iree/build_tools/docker/docker_run.sh \
             $(python ../iree/build_tools/docker/get_image_name.py nvidia) \
-            ./build_tools/cmake/build_test_all_no_device.sh \
-            $PWD/build
+            ./openxla-nvgpu/build_tools/cmake/build_test_all_no_device.sh \
+              ./openxla-nvgpu ./build

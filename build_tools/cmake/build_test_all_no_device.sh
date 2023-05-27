@@ -10,7 +10,8 @@
 
 set -xeuo pipefail
 
-BUILD_DIR="${1:-${IREE_BUILD_DIR:-build}}"
+SOURCE_DIR="${1:-${PWD}/openxla-nvgpu}
+BUILD_DIR="${2:-${IREE_BUILD_DIR:-build}}"
 CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
 ENABLE_ASSERTIONS="${ENABLE_ASSERTIONS:-ON}"
 CMAKE_BIN="${CMAKE_BIN:-$(which cmake)}"

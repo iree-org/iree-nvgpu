@@ -41,6 +41,26 @@ def RefineTritonAbi :
 }
 
 //===----------------------------------------------------------------------===//
+// Conversions to TritonFlow dialect
+//===----------------------------------------------------------------------===//
+
+def ConvertHloToTriton :
+    Pass<"openxla-nvgpu-convert-hlo-to-triton", "mlir::ModuleOp"> {
+  let summary = "Converts HLO Triton custom calls to TritonFlow calls";
+
+  let constructor = [{
+    openxla::compiler::nvgpu::tritonflow::createConvertHloToTritonPass()
+  }];
+
+  let dependentDialects = [
+    "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
+    "mlir::arith::ArithDialect",
+    "mlir::mhlo::MhloDialect",
+    "mlir::triton::TritonDialect",
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // Conversions from TritonFlow dialect
 //===----------------------------------------------------------------------===//
 

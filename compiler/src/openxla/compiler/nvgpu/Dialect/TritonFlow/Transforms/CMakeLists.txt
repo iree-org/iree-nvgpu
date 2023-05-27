@@ -39,6 +39,7 @@ iree_cc_library(
   HDRS
     "Passes.h"
   SRCS
+    "ConvertHloToTriton.cpp"
     "ConvertTritonToFlowDispatch.cpp"
     "OutlineTritonCalls.cpp"
     "Passes.cpp"
@@ -46,6 +47,7 @@ iree_cc_library(
   DEPS
     ::PassHeaders
     MLIRPass
+    openxla::compiler::nvgpu::Dialect::TritonFlow::Conversion::HloToTriton
     openxla::compiler::nvgpu::Dialect::TritonFlow::Conversion::TritonToFlowDispatch
   PUBLIC
 )

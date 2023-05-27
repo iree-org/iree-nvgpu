@@ -23,6 +23,13 @@ createOutlineTritonCallsPass();
 std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>> createRefineTritonAbi();
 
 //===----------------------------------------------------------------------===//
+// Conversions to TritonFlow dialect
+//===----------------------------------------------------------------------===//
+
+std::unique_ptr<mlir::OperationPass<mlir::ModuleOp>>
+createConvertHloToTritonPass();
+
+//===----------------------------------------------------------------------===//
 // Conversions from TritonFlow dialect
 //===----------------------------------------------------------------------===//
 

@@ -8,6 +8,27 @@ iree_add_all_subdirs()
 
 iree_cc_library(
   NAME
+    HloToTriton
+  HDRS
+    "ConvertHloToTriton.h"
+  SRCS
+    "ConvertHloToTriton.cpp"
+  DEPS
+    LLVMSupport
+    MLIRIR
+    MLIRMhloUtils
+    MLIRPass
+    MLIRTransforms
+    MhloDialect
+    openxla::compiler::nvgpu::Dialect::TritonFlow::IR
+    tensorflow::external_mhlo_includes
+    # TODO(ezhulenev): Triton dependencies are not part of bazel build.
+    triton::TritonIR
+  PUBLIC
+)
+
+iree_cc_library(
+  NAME
     TritonToFlowDispatch
   HDRS
     "ConvertTritonToFlowDispatch.h"

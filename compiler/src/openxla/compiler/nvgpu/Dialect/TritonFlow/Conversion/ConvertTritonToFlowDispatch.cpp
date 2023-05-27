@@ -282,7 +282,8 @@ struct ConvertTritonFlowDispatchOp : public OpConversionPattern<DispatchOp> {
     rewriter.replaceOpWithNewOp<IREE::Flow::DispatchOp>(
         op, executableEntryPoint, adaptor.getGrid(), op->getResultTypes(),
         adaptor.getResultDims(), adaptor.getArguments(),
-        adaptor.getArgumentDims(), adaptor.getTiedOperands().value_or(nullptr));
+        adaptor.getArgumentDims(),
+        adaptor.getTiedOperands().value_or(rewriter.getArrayAttr({})));
 
     // TODO(ezhulenev): It is not safe in general, but currently we assume that
     // we have 1-to-1 mapping between Triton dispatch and Triton executable.

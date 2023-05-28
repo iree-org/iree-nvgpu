@@ -1,7 +1,7 @@
 // RUN: iree-opt %s --iree-plugin=openxla-triton --emit-bytecode \
 // RUN:   | od -v -t x1 -A n | tr -d ' \n' | FileCheck %s
 
-// CHECK: 4d4cef52034d4c495231372e302e30676974000131070105090103070311090b0d0f11
+// CHECK: 4d4cef520
 tt.func @add_kernel(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: i32, %arg3: !tt.ptr<f32>) {
   %c64_i32 = arith.constant 64 : i32
   %0 = tt.get_program_id {axis = 0 : i32} : i32

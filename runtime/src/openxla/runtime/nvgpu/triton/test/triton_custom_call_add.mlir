@@ -1,5 +1,5 @@
-// RUN: export BYTECODE=$(iree-opt $(dirname %s)/emit_triton_bytecode.mlir \
-// RUN:                     --iree-plugin=openxla-triton \
+// RUN: BYTECODE=$(iree-opt $(dirname %s)/triton_add_bytecode.mlir             \
+// RUN:                     --iree-plugin=openxla-triton                       \
 // RUN:                     --emit-bytecode | od -v -t x1 -A n | tr -d ' \n')
 
 // RUN: sed 's/#BYTECODE#/'"$BYTECODE"'/g' %s > %t-bytecode.mlir

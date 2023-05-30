@@ -7,9 +7,9 @@
 #ifndef OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSDETAIL_H_
 #define OPENXLA_COMPILER_NVGPU_DIALECT_TRITONFLOW_TRANSFORMS_PASSDETAIL_H_
 
-#include <compiler/src/iree/compiler/Dialect/Flow/IR/FlowDialect.h>
-#include <compiler/src/iree/compiler/Dialect/HAL/IR/HALDialect.h>
-
+#include "compiler/src/iree/compiler/Dialect/Flow/IR/FlowDialect.h"
+#include "compiler/src/iree/compiler/Dialect/HAL/IR/HALDialect.h"
+#include "mhlo/IR/hlo_ops.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
@@ -21,6 +21,7 @@
 
 namespace openxla::compiler::nvgpu::tritonflow {
 
+#define GEN_PASS_DECL_CONVERTHLOTOTRITON
 #define GEN_PASS_DECL_CONVERTTRITONTOFLOWDISPATCH
 #define GEN_PASS_DECL_OUTLINETRITONCALLS
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"

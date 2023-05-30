@@ -237,11 +237,15 @@ void ExecutableExportOp::build(OpBuilder &builder, OperationState &state,
 
 LogicalResult ExecutableExportOp::verifySymbolUses(
     SymbolTableCollection &symbolTable) {
-  auto innerModule = getParentOp<ExecutableOp>().getInnerModule();
+  auto innerModule = getExecutable().getInnerModule();
   if (!symbolTable.lookupNearestSymbolFrom(innerModule, getFunctionRefAttr()))
     return emitOpError() << "refers to an unknown Triton function: "
                          << getFunctionRefAttr();
   return success();
+}
+
+ExecutableOp ExecutableExportOp::getExecutable() {
+  return getParentOp<ExecutableOp>();
 }
 
 //===----------------------------------------------------------------------===//
@@ -342,10 +346,6 @@ LogicalResult CallOp::verifySymbolUses(SymbolTableCollection &symbolTable) {
   if (!tritonFunc)
     return emitOpError() << "refers to an unknown Triton function: "
                          << getCalleeAttr();
-
-  // TODO(ezhulenev): Remove this work around when we switch to triton
-  // executable in the end-to-end compilation pipeline.
-  if (op->hasAttr("skip_triton_verifier")) return success();
 
   // Check that Triton function is compatible with the call arguments.
   if (failed(verifyTritonFunction(getOperation(), tritonFunc.getFunctionType(),

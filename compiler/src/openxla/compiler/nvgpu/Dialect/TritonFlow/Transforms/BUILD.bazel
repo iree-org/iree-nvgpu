@@ -46,6 +46,7 @@ cc_library(
 cc_library(
     name = "Transforms",
     srcs = [
+        "ConvertHloToTriton.cpp",
         "ConvertTritonToFlowDispatch.cpp",
         "OutlineTritonCalls.cpp",
         "Passes.cpp",
@@ -54,6 +55,7 @@ cc_library(
     hdrs = ["Passes.h"],
     deps = [
         ":PassHeaders",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/HloToTriton",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/TritonToFlowDispatch",
         "@llvm-project//mlir:Pass",
     ],

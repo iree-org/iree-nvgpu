@@ -63,7 +63,14 @@ struct TritonSession : public PluginSession<TritonSession, TritonOptions> {
     registry.insert<NVVM::NVVMDialect>();
   }
 
+  void extendInputConversionPreprocessingPassPipeline(
+      OpPassManager &pm, InputDialectOptions::Type) override {
+    pm.addPass(createConvertHloToTritonPass());
+  }
+
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
+    pm.addPass(createOutlineTritonCallsPass());
+    pm.addPass(createRefineTritonAbi());
     pm.addPass(createConvertTritonToFlowDispatchPass());
   }
 };

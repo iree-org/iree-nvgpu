@@ -14,6 +14,8 @@ iree_lit_test_suite(
   NAME
     lit
   SRCS
+    "hlo_to_triton_bytecode.mlir"
+    "hlo_to_triton.mlir"
     "outline_triton_calls.mlir"
     "refine_triton_abi.mlir"
     "triton_to_flow_dispatch.mlir"

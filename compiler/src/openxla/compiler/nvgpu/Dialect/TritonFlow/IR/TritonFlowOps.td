@@ -135,6 +135,10 @@ def TritonFlow_ExecutableExportOp : TritonFlow_Op<"executable.export", [
       "mlir::FlatSymbolRefAttr":$function_ref,
       CArg<"mlir::iree_compiler::IREE::HAL::PipelineLayoutAttr", "nullptr">:$layout)>,
   ];
+
+  let extraClassDeclaration = [{
+    ExecutableOp getExecutable();
+  }];
 }
 
 //===----------------------------------------------------------------------===//

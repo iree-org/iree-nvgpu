@@ -13,8 +13,11 @@ iree_lit_test_suite(
     lit
   SRCS
     "triton_add_bytecode.mlir"
+    "triton_add_inplace_bytecode.mlir"
+    "triton_add_inplace.mlir"
     "triton_add.mlir"
     "triton_custom_call_add.mlir"
+    "triton_custom_call_add_inplace.mlir"
   TOOLS
     FileCheck
     iree-compile

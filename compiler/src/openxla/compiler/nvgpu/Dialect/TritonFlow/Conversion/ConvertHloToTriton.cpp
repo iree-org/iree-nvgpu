@@ -94,6 +94,11 @@ struct ConvertCustomCallToTritonCall
     // Prepare storage for tritonflow::CallOp arguments.
     SmallVector<Value> args(op->getNumOperands() + indices.size());
 
+    // A mapping from a custom call operand index to the `args` index after
+    // adding all scalar arguments. We need to keep track of this mapping to be
+    // able to convert custom call operands aliases to tied operands.
+    SmallVector<int64_t> operand_to_arg_idx(op->getNumOperands(), -1);
+
     // Materialize all scalar arguments as constants.
     for (auto tuple : llvm::zip(indices.asArrayRef(), values)) {
       auto [idx, value] = tuple;
@@ -103,7 +108,10 @@ struct ConvertCustomCallToTritonCall
     // Fill the gaps in arguments array with custom call operands (tensors).
     auto operands = llvm::to_vector(op->getOperands());
     for (int64_t i = args.size() - 1; i >= 0; --i) {
-      if (!args[i]) args[i] = operands.pop_back_val();
+      if (!args[i]) {
+        args[i] = operands.pop_back_val();
+        operand_to_arg_idx[operands.size()] = i;
+      }
     }
 
     // Materialize dispatch grid as constants.
@@ -117,14 +125,30 @@ struct ConvertCustomCallToTritonCall
     rewriter.inlineBlockBefore(&modules.front().getBodyRegion().front(),
                                op->getParentOp());
 
+    // Get tied operands based on operand aliases.
+    SmallVector<int64_t> tiedOperands;
+    if (auto aliases = op.getOutputOperandAliases(); !aliases.empty()) {
+      tiedOperands.resize(op.getNumResults(), -1);
+
+      for (auto alias : aliases.getAsRange<mhlo::OutputOperandAliasAttr>()) {
+        // TODO(ezhulenev): Add support for multiple results? How exactly alias
+        // attribute will carry output index in this case? Do we even support
+        // output tuples in HLO dialect?
+        if (!alias.getOperandTupleIndices().empty() ||
+            !alias.getOutputTupleIndices().empty())
+          return rewriter.notifyMatchFailure(op, "tuples are not supported");
+
+        tiedOperands[0] = operand_to_arg_idx[alias.getOperandIndex()];
+      }
+    }
+
     auto callee = FlatSymbolRefAttr::get(ctx, funcs.front().getSymName());
 
-    // TODO(ezhulenev): Add support for operands aliasing as tied operands.
     rewriter.replaceOpWithNewOp<tritonflow::CallOp>(
         op, op.getResultTypes(), dispatchGrid, callee, args,
         /*argumentDims=*/ValueRange(),
         /*resultDims=*/ValueRange(),
-        /*tiedOperands=*/rewriter.getArrayAttr({}));
+        /*tiedOperands=*/rewriter.getIndexArrayAttr(tiedOperands));
 
     return success();
   }

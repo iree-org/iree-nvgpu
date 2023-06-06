@@ -30,10 +30,13 @@ iree_cc_library(
     MLIRTransformDialectTransforms
     StablehloOps
     iree::compiler::Dialect::Flow::IR
-    openxla::compiler::nvgpu::Conversion::HLOToCUDNN
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
     openxla::compiler::nvgpu::Dialect::FlowTransformExtension::IR
     openxla::compiler::nvgpu::defs
+    LLVMSupport
+    MLIRFuncDialect
+    MLIRTransforms
+    StablehloOps
   PUBLIC
 )
 

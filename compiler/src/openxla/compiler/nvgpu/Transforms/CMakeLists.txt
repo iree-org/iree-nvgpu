@@ -18,12 +18,21 @@ iree_cc_library(
     "Passes.h.inc"
   SRCS
     "ConvertHLOToCUDNN.cpp"
+    "FlowTransformInterpreter.cpp"
   DEPS
     ::PassesIncGen
+    IREELinalgExtDialect
+    LLVMSupport
     MLIRIR
+    MLIRLinalgDialect
     MLIRPass
+    MLIRTransformDialect
+    MLIRTransformDialectTransforms
+    StablehloOps
+    iree::compiler::Dialect::Flow::IR
     openxla::compiler::nvgpu::Conversion::HLOToCUDNN
     openxla::compiler::nvgpu::Dialect::CUDNN::IR
+    openxla::compiler::nvgpu::Dialect::FlowTransformExtension::IR
     openxla::compiler::nvgpu::defs
   PUBLIC
 )

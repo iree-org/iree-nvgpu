@@ -97,7 +97,7 @@ struct ConvertCustomCallToTritonCall
     // A mapping from a custom call operand index to the `args` index after
     // adding all scalar arguments. We need to keep track of this mapping to be
     // able to convert custom call operands aliases to tied operands.
-    SmallVector<int64_t> operand_to_arg_idx(op->getNumOperands(), -1);
+    SmallVector<int64_t> operandToArgIdx(op->getNumOperands(), -1);
 
     // Materialize all scalar arguments as constants.
     for (auto tuple : llvm::zip(indices.asArrayRef(), values)) {
@@ -110,7 +110,7 @@ struct ConvertCustomCallToTritonCall
     for (int64_t i = args.size() - 1; i >= 0; --i) {
       if (!args[i]) {
         args[i] = operands.pop_back_val();
-        operand_to_arg_idx[operands.size()] = i;
+        operandToArgIdx[operands.size()] = i;
       }
     }
 
@@ -138,7 +138,7 @@ struct ConvertCustomCallToTritonCall
             !alias.getOutputTupleIndices().empty())
           return rewriter.notifyMatchFailure(op, "tuples are not supported");
 
-        tiedOperands[0] = operand_to_arg_idx[alias.getOperandIndex()];
+        tiedOperands[0] = operandToArgIdx[alias.getOperandIndex()];
       }
     }
 

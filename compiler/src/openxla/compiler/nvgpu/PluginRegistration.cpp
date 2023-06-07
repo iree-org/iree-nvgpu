@@ -12,6 +12,7 @@
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNTypes.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/Transforms/Passes.h"
+#include "openxla/compiler/nvgpu/Dialect/FlowTransformExtension/IR/FlowTransformExtension.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Transforms/Passes.h"
@@ -171,10 +172,17 @@ struct TransformPreprocessingOptions {
 struct TransformPreprocessingSession
     : public PluginSession<TransformPreprocessingSession,
                            TransformPreprocessingOptions> {
+  static void registerPasses() {
+    ::detail::registerFlowTransformInterpreterPass();
+  }
+
+  void onRegisterDialects(DialectRegistry &registry) override {
+    mlir::openxla::nvgpu::registerFlowTransformExtension(registry);
+  }
+
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
-    if (!options.preprocessingTransformFileName.empty())
-      pm.addPass(iree_compiler::createTransformDialectInterpreterPass(
-          options.preprocessingTransformFileName));
+    pm.addPass(::openxla::compiler::nvgpu::createFlowTransformInterpreterPass(
+        options.preprocessingTransformFileName));
   }
 };
 

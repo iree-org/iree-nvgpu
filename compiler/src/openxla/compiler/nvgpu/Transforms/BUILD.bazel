@@ -8,8 +8,7 @@ load(
     "//build_tools/bazel:build_defs.oss.bzl",
     "iree_compiler_cc_library",
     "iree_gentbl_cc_library",
-    "iree_tablegen_doc",
-    "iree_td_library"
+    "iree_td_library",
 )
 
 package(
@@ -32,6 +31,7 @@ iree_compiler_cc_library(
     name = "Transforms",
     srcs = [
         "ConvertHLOToCUDNN.cpp",
+        "FlowTransformInterpreter.cpp",
     ],
     hdrs = [
         "Passes.h",
@@ -40,10 +40,17 @@ iree_compiler_cc_library(
     deps = [
         ":PassesIncGen",
         "//compiler/src/openxla/compiler/nvgpu:defs",
-        "//compiler/src/openxla/compiler/nvgpu/Conversion:HLOToCUDNN"
+        "//compiler/src/openxla/compiler/nvgpu/Conversion:HLOToCUDNN",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/FlowTransformExtension/IR",
+        "@iree_core//compiler/src/iree/compiler/Dialect/Flow/IR",
+        "@iree_core//llvm-external-projects/iree-dialects:IREELinalgExtDialect",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:TransformDialect",
+        "@llvm-project//mlir:TransformDialectTransforms",
         "@mlir-hlo//stablehlo:stablehlo_ops",
     ],
 )

@@ -27,6 +27,7 @@ cc_library(
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUBLAS/IR",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/IR",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/CUDNN/Transforms",
+        "//compiler/src/openxla/compiler/nvgpu/Dialect/FlowTransformExtension/IR",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/IR",
         "//compiler/src/openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms",
         "//compiler/src/openxla/compiler/nvgpu/Transforms",

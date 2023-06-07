@@ -1,0 +1,73 @@
+# Copyright 2023 The OpenXLA Authors
+#
+# Licensed under the Apache License v2.0 with LLVM Exceptions.
+# See https://llvm.org/LICENSE.txt for license information.
+# SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+package(
+    default_visibility = ["//visibility:public"],
+    features = ["layering_check"],
+    licenses = ["notice"],  # Apache 2.0
+)
+
+iree_td_library(
+    name = "td_files",
+    srcs = enforce_glob(
+        [
+            "FlowTransformExtension.td",
+        ],
+        include = ["*.td"],
+    ),
+    deps = [
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:TransformDialectTdFiles",
+    ],
+)
+
+cc_library(
+    name = "IR",
+    srcs = [
+        "FlowTransformExtension.cpp",
+    ],
+    hdrs = [
+        "FlowTransformExtension.h",
+    ],
+    textual_hdrs = [
+        "FlowTransformExtension.h.inc",
+        "FlowTransformExtension.cpp.inc",
+    ],
+    deps = [
+        ":OpsGen",
+        "//compiler/src/openxla/compiler/nvgpu:defs",
+        "@iree_core//compiler/src/iree/compiler/Dialect/Flow/IR",
+        "@iree_core//llvm-external-projects/iree-dialects:IREEDialectsTransforms",
+        # TODO: this is only necessary to work around the missing includes
+        # on the cmake side: remove after
+        # https://github.com/openxla/iree/pull/13980 lands and the dependency
+        # is updated.
+        "@iree_core//llvm-external-projects/iree-dialects:IREELinalgExtDialect",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
+        "@llvm-project//mlir:SideEffectInterfaces",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformDialect",
+    ],
+)
+
+iree_gentbl_cc_library(
+    name = "OpsGen",
+    tbl_outs = [
+        (
+            ["-gen-op-decls"],
+            "FlowTransformExtension.h.inc",
+        ),
+        (
+            ["-gen-op-defs"],
+            "FlowTransformExtension.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "FlowTransformExtension.td",
+    deps = [":td_files"],
+)

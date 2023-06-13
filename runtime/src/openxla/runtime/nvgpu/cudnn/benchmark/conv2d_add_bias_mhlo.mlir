@@ -1,5 +1,6 @@
-// RUN: iree-compile --compile-to=vm --iree-plugin=openxla-cudnn               \
-// RUN:              --iree-input-type=mhlo --iree-hal-target-backends=cuda %s \
+// RUN: iree-compile %s --iree-plugin=openxla-cudnn                            \
+// RUN:     --iree-input-type=stablehlo --compile-to=vm                        \
+// RUN:     --iree-hal-target-backends=cuda                                    \
 // RUN: | FileCheck %s
 
 //===-----------------------------------------------------------------------===/

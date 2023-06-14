@@ -10,7 +10,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MemoryBufferRef.h"
-#include "mhlo/IR/hlo_ops.h"
 #include "mlir/Bytecode/BytecodeReader.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
@@ -22,6 +21,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
+#include "stablehlo/dialect/StablehloOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 namespace openxla::compiler::nvgpu::tritonflow {
@@ -30,11 +30,11 @@ namespace {
 using namespace mlir;
 
 struct ConvertCustomCallToTritonCall
-    : public OpConversionPattern<mhlo::CustomCallOp> {
+    : public OpConversionPattern<stablehlo::CustomCallOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      mhlo::CustomCallOp op, OpAdaptor adaptor,
+      stablehlo::CustomCallOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     MLIRContext *ctx = getContext();
 
@@ -130,7 +130,8 @@ struct ConvertCustomCallToTritonCall
     if (auto aliases = op.getOutputOperandAliases(); !aliases.empty()) {
       tiedOperands.resize(op.getNumResults(), -1);
 
-      for (auto alias : aliases.getAsRange<mhlo::OutputOperandAliasAttr>()) {
+      for (auto alias :
+           aliases.getAsRange<stablehlo::OutputOperandAliasAttr>()) {
         // TODO(ezhulenev): Add support for multiple results? How exactly alias
         // attribute will carry output index in this case? Do we even support
         // output tuples in HLO dialect?

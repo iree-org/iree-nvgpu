@@ -79,7 +79,6 @@ iree_cc_library(
     iree::base
     iree::base::core_headers
     iree::base::internal::dynamic_library
-    iree::base::tracing
     # TODO: We rely on the fact that cuDNN headers are located in the same
     # directory as CUDA headers. Fix this.
     iree_cuda::headers

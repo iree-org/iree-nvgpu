@@ -279,7 +279,7 @@ transform_dialect::RegisterNVGPUMatchCallbacks::apply(
     registry = &state.addExtension<transform_ext::MatchCallbacksRegistry>();
   }
 
-  registry->registerCallback("reduction_partial",
+  registry->registerCallback("reduction_partial_nvgpu",
                              reductionCallbackCopiedFromIREE);
   return DiagnosedSilenceableFailure::success();
 }

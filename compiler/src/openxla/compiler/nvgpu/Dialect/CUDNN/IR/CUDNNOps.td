@@ -51,7 +51,7 @@ class CUDNN_UnaryOp<string mnemonic, list<Trait> traits = []> :
     CUDNN_Op<mnemonic, !listconcat([Pure], traits)>,
     Arguments<(ins
       CUDNN_TensorType:$x,
-      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha)>,
+      DefaultValuedOptionalAttr<F64Attr, "1.0f">:$alpha)>,
     Results<(outs CUDNN_TensorType:$y)> {
   let assemblyFormat = [{
     `(` $x `)`
@@ -78,8 +78,8 @@ class CUDNN_BinaryOp<string mnemonic, list<Trait> traits = []> :
     Arguments<(ins
       CUDNN_TensorType:$x,
       CUDNN_TensorType:$b,
-      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha,
-      DefaultValuedOptionalAttr<F32Attr, "1.0f">:$alpha2)>,
+      DefaultValuedOptionalAttr<F64Attr, "1.0f">:$alpha,
+      DefaultValuedOptionalAttr<F64Attr, "1.0f">:$alpha2)>,
     Results<(outs CUDNN_TensorType:$y)> {
   let assemblyFormat = [{
     `(` $x `,` $b `)`
@@ -160,8 +160,8 @@ def CUDNN_ConvolutionOp : CUDNN_Op<"convolution", [Pure]> {
     let arguments = (ins
       CUDNN_TensorType:$x,
       CUDNN_TensorType:$w,
-      F32Attr:$alpha,
-      F32Attr:$beta,
+      F64Attr:$alpha,
+      F64Attr:$beta,
       I32Attr:$spatial_dim_count,
       DenseI64ArrayAttr:$spatial_stride,
       DenseI64ArrayAttr:$pre_padding,

@@ -392,7 +392,7 @@ StatusOr<vm::ref<CudnnTensor>> CreateTensor(
 
 StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CudnnTensor& x, float alpha, int64_t uid, int64_t alignment,
+    CudnnTensor& x, double alpha, int64_t uid, int64_t alignment,
     bool is_virtual) {
   ScopedCudnnStubs stubs(syms);
 
@@ -434,7 +434,7 @@ StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseUnary(
 
 StatusOr<iree::vm::ref<CudnnTensor>> CreatePointwiseBinary(
     openxla_cudnn_dynamic_symbols_t* syms, cudnnPointwiseMode_t mode,
-    CudnnTensor& x, float alpha, CudnnTensor& b, float alpha2, int64_t uid,
+    CudnnTensor& x, double alpha, CudnnTensor& b, double alpha2, int64_t uid,
     int64_t alignment, bool is_virtual) {
   ScopedCudnnStubs stubs(syms);
 

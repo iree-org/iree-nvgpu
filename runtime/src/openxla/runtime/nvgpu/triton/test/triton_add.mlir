@@ -1,4 +1,4 @@
-// RUN: iree-compile --iree-plugin=openxla-triton --iree-input-type=mhlo       \
+// RUN: iree-compile --iree-plugin=openxla-triton --iree-input-type=stablehlo  \
 // RUN:              --iree-hal-target-backends=cuda %s                        \
 // RUN: | iree-run-module --module=- --device=cuda --function=main             \
 // RUN:                   --input=128xf32=2 --input=128xf32=6                  \

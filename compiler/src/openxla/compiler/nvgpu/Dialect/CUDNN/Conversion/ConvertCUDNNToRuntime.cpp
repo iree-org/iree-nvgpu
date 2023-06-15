@@ -418,7 +418,7 @@ struct ConvertCudnnCallOp : public CudnnOpConversionPattern<cudnn::CallOp> {
     // streamable functions for cuDNN module.
 
     // Allocate a result tensor for destination-passing style call.
-    auto resultDst = b.create<IREE::Flow::TensorAllocOp>(
+    auto resultDst = b.create<IREE::Flow::TensorAllocaOp>(
         op->getResult(0).getType(), /*result_dims=*/ValueRange());
     auto resultName = llvm::formatv("{0}.ret.0", op.getCallee());
     args.push_back(b.create<IREE::HAL::TensorExportOp>(

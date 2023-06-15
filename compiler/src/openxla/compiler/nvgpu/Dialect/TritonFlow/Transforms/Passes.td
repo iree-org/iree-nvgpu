@@ -55,7 +55,7 @@ def ConvertHloToTriton :
   let dependentDialects = [
     "openxla::compiler::nvgpu::tritonflow::TritonFlowDialect",
     "mlir::arith::ArithDialect",
-    "mlir::mhlo::MhloDialect",
+    "mlir::stablehlo::StablehloDialect",
     "mlir::triton::TritonDialect",
   ];
 }

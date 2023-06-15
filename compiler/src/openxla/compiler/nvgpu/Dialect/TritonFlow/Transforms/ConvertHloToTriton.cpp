@@ -6,7 +6,6 @@
 
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Conversion/ConvertHloToTriton.h"
 
-#include "mhlo/IR/hlo_ops.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Types.h"
@@ -15,6 +14,7 @@
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowOps.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/PassDetail.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h"
+#include "stablehlo/dialect/StablehloOps.h"
 
 #define GEN_PASS_DEF_CONVERTHLOTOTRITON
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/Transforms/Passes.h.inc"
@@ -35,8 +35,8 @@ class ConvertHloToTriton
     // Ensure all Triton custom calls get lowered to TritonFlow calls.
     ConversionTarget conversionTarget(*context);
     conversionTarget.addLegalDialect<arith::ArithDialect, TritonFlowDialect>();
-    conversionTarget.addDynamicallyLegalOp<mhlo::CustomCallOp>(
-        [](mhlo::CustomCallOp op) {
+    conversionTarget.addDynamicallyLegalOp<stablehlo::CustomCallOp>(
+        [](stablehlo::CustomCallOp op) {
           return op.getCallTargetName() != "__triton$call";
         });
 

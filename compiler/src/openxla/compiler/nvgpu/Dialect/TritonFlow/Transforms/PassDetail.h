@@ -9,13 +9,13 @@
 
 #include "compiler/src/iree/compiler/Dialect/Flow/IR/FlowDialect.h"
 #include "compiler/src/iree/compiler/Dialect/HAL/IR/HALDialect.h"
-#include "mhlo/IR/hlo_ops.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/TritonFlow/IR/TritonFlowDialect.h"
+#include "stablehlo/dialect/StablehloOps.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
 #include "triton/Dialect/TritonGPU/IR/Dialect.h"
 

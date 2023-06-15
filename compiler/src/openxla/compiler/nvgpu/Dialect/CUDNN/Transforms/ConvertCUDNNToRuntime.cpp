@@ -42,7 +42,7 @@ class ConverCudnnToRuntime
     // Ensure all cuDNN dialect operations go away.
     ConversionTarget conversionTarget(*context);
     conversionTarget.addIllegalDialect<cudnn::CUDNNDialect>();
-    conversionTarget.addLegalOp<IREE::Flow::TensorAllocOp>();
+    conversionTarget.addLegalOp<IREE::Flow::TensorAllocaOp>();
     conversionTarget.addLegalOp<IREE::HAL::TensorExportOp>();
     conversionTarget.addLegalDialect<IREE::Util::UtilDialect>();
     conversionTarget.addLegalDialect<func::FuncDialect>();

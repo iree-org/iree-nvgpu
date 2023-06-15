@@ -16,12 +16,10 @@ iree_cc_library(
   DEPS
     LLVMSupport
     MLIRIR
-    MLIRMhloUtils
     MLIRPass
     MLIRTransforms
-    MhloDialect
     openxla::compiler::nvgpu::Dialect::TritonFlow::IR
-    tensorflow::external_mhlo_includes
+    StablehloOps
     # TODO(ezhulenev): Triton dependencies are not part of bazel build.
     triton::TritonIR
   PUBLIC

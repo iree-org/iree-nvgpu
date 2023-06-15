@@ -2,13 +2,13 @@
 ### AUTO-GENERATED: DO NOT EDIT
 ### Casual developers and CI bots invoke this to do the most
 ### efficient checkout of dependencies.
-### Cross-repo project development should use the 
+### Cross-repo project development should use the
 ### 'openxla-workspace' dev tool for more full featured setup.
 ### Update with: openxla-workspace pin
 
 PINNED_VERSIONS = {
-  "iree": "7f10fe28ddc3cbc1bd8466a751ce2e03dd0da0c5",
-  "openxla-pjrt-plugin": "f8a5cb512a950e65d2b10722c3acf9ca846072b3"
+  "iree": "bed276374644b04750d7dbb4f556c8f7756102cf",
+  "openxla-pjrt-plugin": "17682e64a9740320957747ba5c125483798fcee4"
 }
 
 ORIGINS = {

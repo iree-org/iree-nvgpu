@@ -47,10 +47,10 @@ func.func @test_conv(%x : tensor<100x26x26x32xf32>, %w : tensor<64x3x3x32xf32>)
 // CHECK-IR:   func.call @cudnn.handle
 
 // CHECK-IR: func.func @stablehlo.convolution.builder
-// CHECK-IR:   %0 = call @cudnn.tensor.create.4d.nhwc
-// CHECK-IR:   %1 = call @cudnn.tensor.create.4d.nhwc
-// CHECK-IR:   %2 = call @cudnn.convolution.2d
-// CHECK-IR:   %3 = call @cudnn.operation_graph.create
+// CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
+// CHECK-IR:   call @cudnn.tensor.create.4d.khwc
+// CHECK-IR:   call @cudnn.convolution.2d
+// CHECK-IR:   call @cudnn.operation_graph.create
 
 // CHECK-IR: util.initializer
 // CHECK-IR:   func.call @stablehlo.convolution.builder

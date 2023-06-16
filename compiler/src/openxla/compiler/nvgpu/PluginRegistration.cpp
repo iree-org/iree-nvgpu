@@ -136,6 +136,8 @@ struct CudnnSession : public PluginSession<CudnnSession, CudnnOptions> {
   void extendInputConversionPreprocessingPassPipeline(
       OpPassManager &pm, InputDialectOptions::Type inputType) override {
     if (inputType == InputDialectOptions::Type::stablehlo) {
+      // TODO: Remove NormalizeHLOConvolutionLayoutsPass when this is
+      // implemented in HLO to CUDNN lowering.
       pm.addNestedPass<func::FuncOp>(
           createNormalizeHLOConvolutionLayoutsPass(Layout::NHWC, Layout::KHWC));
       pm.addPass(createConvertHLOToCUDNNPass());

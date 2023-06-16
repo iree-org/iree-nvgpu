@@ -54,12 +54,6 @@ if(OPENXLA_NVGPU_BUILD_COMPILER)
   # enabled shared library builds, which enable better plugin flows
   # (but are not how we typically package for deployment).
   option(IREE_COMPILER_BUILD_SHARED_LIBS "Enables shared libraries in the compiler by default" ON)
-
-  if (IREE_BUILD_PYTHON_BINDINGS)
-    # TODO(ezhulenev): This is only enabled to build LLD tool required for
-    # running Python tests, and because I can't find how to do it any other way!
-    option(IREE_TARGET_BACKEND_LLVM_CPU "Enables LLVM CPU taget backend" ON)
-  endif()
 endif()
 
 #-------------------------------------------------------------------------------

@@ -224,8 +224,13 @@ static LogicalResult matchConvolution(stablehlo::ConvolutionOp op,
     return rewriter.notifyMatchFailure(op,
                                        "expected feature_group_count to be 1");
   }
-  if (op.getPrecisionConfig()) {
-    return rewriter.notifyMatchFailure(op, "expected no precision config");
+  if (op.getPrecisionConfig() &&
+      llvm::any_of(*op.getPrecisionConfig(), [](Attribute a) {
+        return a.cast<stablehlo::PrecisionAttr>().getValue() !=
+               stablehlo::Precision::DEFAULT;
+      })) {
+    return rewriter.notifyMatchFailure(
+        op, "expected no or default precision config");
   }
 
   // Check unit dilation.

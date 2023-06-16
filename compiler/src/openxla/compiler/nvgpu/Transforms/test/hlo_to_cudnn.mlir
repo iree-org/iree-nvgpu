@@ -255,3 +255,49 @@ func.func @conv_conv(%input : tensor<100x26x26x32xf32>,
 // CHECK-SAME:       @stablehlo.convolution(%[[ARG0_2]], %[[ARG1_2]],
 // CHECK-SAME:       %[[ARG1_2]])
 // CHECK:        return %[[CALL_2]]
+
+// -----
+
+func.func @conv_with_default_precision(%arg0: tensor<1x14x14x512xf32>,
+    %arg1: tensor<3x3x512x512xf32>, %arg2: tensor<1x7x7x512xf32>)
+    -> tensor<1x7x7x512xf32> {
+  %0 = stablehlo.convolution(%arg0, %arg1)
+      dim_numbers = [b, 0, 1, f]x[0, 1, i, o]->[b, 0, 1, f],
+      window = {stride = [2, 2], pad = [[1, 1], [1, 1]],
+      lhs_dilate = [1, 1], rhs_dilate = [1, 1], reverse = [0, 0]}
+      {batch_group_count = 1 : i64, feature_group_count = 1 : i64,
+      precision_config = [#stablehlo<precision DEFAULT>,
+      #stablehlo<precision DEFAULT>]}
+      : (tensor<1x14x14x512xf32>, tensor<3x3x512x512xf32>)
+      -> tensor<1x7x7x512xf32>
+  %1 = stablehlo.subtract %0, %arg2 : tensor<1x7x7x512xf32>
+  return %1 : tensor<1x7x7x512xf32>
+}
+
+// CHECK:      util.global public @cudnn.shared.handle
+// CHECK:      util.initializer
+// CHECK:        %[[DEVICE:.*]] = hal.ex.shared_device
+// CHECK:        %[[HANDLE:.*]] = cudnn.handle(%[[DEVICE]])
+// CHECK:        util.global.store %[[HANDLE]], @cudnn.shared.handle
+// CHECK:        util.initializer.return
+// CHECK:      cudnn.graph @stablehlo.convolution(
+// CHECK-SAME:     %[[ARG0:.*]]: !cudnn.tensor<1x512x14x14xf32, NHWC>,
+// CHECK-SAME:     %[[ARG1:.*]]: !cudnn.tensor<512x512x3x3xf32, KHWC>)
+// CHECK-SAME:     -> !cudnn.tensor<1x512x7x7xf32, NHWC>
+// CHECK:        %[[CONVOLUTION:.*]] = cudnn.convolution(%[[ARG0]], %[[ARG1]])
+// CHECK-SAME:       alpha = 1.000000e+00 beta = 0.000000e+00
+// CHECK-SAME:       spatial_dim_count = 2 spatial_stride = [2, 2]
+// CHECK-SAME:       pre_padding = [1, 1] post_padding = [1, 1]
+// CHECK-SAME:       dilation = [1, 1]
+// CHECK:        cudnn.return %[[CONVOLUTION]]
+// CHECK:      @conv_with_default_precision(%[[ARG0]]: tensor<1x14x14x512xf32>,
+// CHECK-SAME:     %[[ARG1]]: tensor<3x3x512x512xf32>,
+// CHECK-SAME:     %[[ARG2:.*]]: tensor<1x7x7x512xf32>)
+// CHECK:        %[[CUDNN:.*]].shared.handle = util.global.load
+// CHECK-SAME:       @cudnn.shared.handle
+// CHECK:        %[[TRANSPOSE:.*]] = stablehlo.transpose %[[ARG1]],
+// CHECK-SAME:       dims = [3, 0, 1, 2]
+// CHECK:        %[[CALL:.*]] = cudnn.call handle(%[[CUDNN]].shared.handle)
+// CHECK-SAME:       @stablehlo.convolution(%[[ARG0]], %[[TRANSPOSE]])
+// CHECK:        %[[SUBTRACT:.*]] = stablehlo.subtract %[[CALL]], %[[ARG2]]
+// CHECK:        return %[[SUBTRACT]]

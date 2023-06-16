@@ -20,7 +20,7 @@ struct TritonOptions {
   // TODO(ezhulenev): This is a very old compute capability version that happens
   // to work on P100 GPUs attached to ezhulenev@ desktop. We have to target 7.0+
   // as Triton officially does not support lower versions.
-  int32_t compute_capability = 35;
+  int32_t compute_capability = 60;
 
   // TODO(ezhulenev): We have to get PTX version from the CUDA Toolkit version.
   // See example in Triton compiler.py `ptx_get_version`.

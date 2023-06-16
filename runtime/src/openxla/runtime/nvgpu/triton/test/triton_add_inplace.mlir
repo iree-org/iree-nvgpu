@@ -1,4 +1,4 @@
-// RUN: iree-compile --iree-plugin=openxla-triton --iree-input-type=mhlo       \
+// RUN: iree-compile --iree-plugin=openxla-triton --iree-input-type=stablehlo  \
 // RUN:              --iree-hal-target-backends=cuda %s                        \
 // RUN: | iree-run-module --module=- --device=cuda --function=main             \
 // RUN:                   --input=128xf32=2 --input=128xf32=6                  \
@@ -6,7 +6,7 @@
 
 tt.func @add_inplace_kernel(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: i32) {
   %c64_i32 = arith.constant 64 : i32
-  %0 = tt.get_program_id {axis = 0 : i32} : i32
+  %0 = tt.get_program_id x : i32
   %1 = arith.muli %0, %c64_i32 : i32
   %2 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
   %3 = tt.splat %1 : (i32) -> tensor<64xi32>

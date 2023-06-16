@@ -9,7 +9,7 @@
 // RUN:   | FileCheck %s --dump-input=always
 
 func.func @foo(%arg0: tensor<10xf32>) -> tensor<10xf32> {
-  %0 = mhlo.custom_call @__triton$call(%arg0) {
+  %0 = stablehlo.custom_call @__triton$call(%arg0) {
     backend_config = "#BYTECODE#",
     grid = array<i64: 1, 1, 1>,
     num_warps = 4 : index,
@@ -37,13 +37,13 @@ func.func @foo(%arg0: tensor<10xf32>) -> tensor<10xf32> {
 // Check that operand alias gets lowered to a call with tied operand.
 
 func.func @foo(%arg0: tensor<10xf32>, %arg1: tensor<10xf32>) -> tensor<10xf32> {
-  %0 = mhlo.custom_call @__triton$call(%arg0, %arg1) {
+  %0 = stablehlo.custom_call @__triton$call(%arg0, %arg1) {
     backend_config = "#BYTECODE#",
     grid = array<i64: 1, 1, 1>,
     num_warps = 4 : index,
     scalar_args_indices = array<i64: 0>,
     scalar_args_values = [10 : i32],
-    output_operand_aliases = [#mhlo.output_operand_alias<
+    output_operand_aliases = [#stablehlo.output_operand_alias<
                                 output_tuple_indices = [],
                                 operand_index = 1,
                                 operand_tuple_indices = []>]

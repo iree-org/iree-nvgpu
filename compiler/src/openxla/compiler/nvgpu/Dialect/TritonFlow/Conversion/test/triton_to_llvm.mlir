@@ -10,7 +10,7 @@
 // CHECK:  ) attributes {nvvm.kernel = 1 : ui1, nvvm.maxntid = [128 : i32]}
 tt.func @add_kernel(%arg0: !tt.ptr<f32>, %arg1: !tt.ptr<f32>, %arg2: !tt.ptr<f32>, %arg3: i32) {
   %c64_i32 = arith.constant 64 : i32
-  %0 = tt.get_program_id {axis = 0 : i32} : i32
+  %0 = tt.get_program_id x : i32
   %1 = arith.muli %0, %c64_i32 : i32
   %2 = tt.make_range {end = 64 : i32, start = 0 : i32} : tensor<64xi32>
   %3 = tt.splat %1 : (i32) -> tensor<64xi32>

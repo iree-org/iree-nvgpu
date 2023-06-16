@@ -10,8 +10,10 @@
 // RUN:                   --input=128xf32=2 --input=128xf32=6                  \
 // RUN: | FileCheck %s
 
-func.func @main(%arg0: tensor<128xf32>, %arg1: tensor<128xf32>) -> tensor<128xf32> {
-  %0 = mhlo.custom_call @__triton$call(%arg0, %arg1) {
+func.func @main(
+  %arg0: tensor<128xf32>, %arg1: tensor<128xf32>
+) -> tensor<128xf32> {
+  %0 = stablehlo.custom_call @__triton$call(%arg0, %arg1) {
     backend_config = "#BYTECODE#",
     grid = array<i64: 1, 1, 1>,
     num_warps = 4 : index,

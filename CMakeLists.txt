@@ -49,10 +49,17 @@ if(OPENXLA_NVGPU_BUILD_COMPILER)
   option(IREE_BUILD_COMPILER "Enable IREE compiler build" ON)
   option(IREE_BUILD_SAMPLES "Disable IREE samples build" OFF)
   option(IREE_TARGET_BACKEND_CUDA "Enables CUDA target backend" ON)
+
   # Since the standalone build is primarily targeted for development mode,
   # enabled shared library builds, which enable better plugin flows
   # (but are not how we typically package for deployment).
   option(IREE_COMPILER_BUILD_SHARED_LIBS "Enables shared libraries in the compiler by default" ON)
+
+  if (IREE_BUILD_PYTHON_BINDINGS)
+    # TODO(ezhulenev): This is only enabled to build LLD tool required for
+    # running Python tests, and because I can't find how to do it any other way!
+    option(IREE_TARGET_BACKEND_LLVM_CPU "Enables LLVM CPU taget backend" ON)
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------
@@ -124,6 +131,12 @@ if(OPENXLA_NVGPU_BUILD_COMPILER)
     iree-opt
     FileCheck
   )
+
+  if (IREE_BUILD_PYTHON_BINDINGS)
+    add_dependencies(openxla-nvgpu-iree-deps
+      IREECompilerPythonModules
+    )
+  endif()
 endif()
 
 if(OPENXLA_NVGPU_BUILD_RUNTIME)
@@ -134,6 +147,12 @@ if(OPENXLA_NVGPU_BUILD_RUNTIME)
     iree-run-module
     iree-run-trace
   )
+
+  if (IREE_BUILD_PYTHON_BINDINGS)
+    add_dependencies(openxla-nvgpu-iree-deps
+      iree_runtime_bindings_python_runtime
+    )
+  endif()
 endif()
 
 #-------------------------------------------------------------------------------

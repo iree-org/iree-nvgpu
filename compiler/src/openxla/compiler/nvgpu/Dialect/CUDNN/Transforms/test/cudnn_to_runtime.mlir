@@ -197,7 +197,7 @@ func.func @main(%handle: !cudnn.handle,
 // CHECK:   %[[G:.*]] = call @graph.builder(%[[HANDLE]])
 // CHECK:   %[[E:.*]] = call @cudnn.executable.create(%[[G]])
 // CHECK:   %[[BUF0:.*]] = hal.tensor.export %[[ARG]] "graph.arg.0"
-// CHECK:   %[[ALLOC:.*]] = flow.tensor.alloc : tensor<1x4x8xf32>
+// CHECK:   %[[ALLOC:.*]] = flow.tensor.alloca : tensor<1x4x8xf32>
 // CHECK:   %[[RET0:.*]] = hal.tensor.export %[[ALLOC]] "graph.ret.0"
 // CHECK:   call @cudnn.execute.1.1(%[[E]], %[[BUF0]], %[[RET0]])
 // CHECK:   return %[[ALLOC]] : tensor<1x4x8xf32>

@@ -14,7 +14,7 @@ import numpy as np
 
 
 def create_simple_mul_module(instance):
-  binary = iree.compiler.compile_str("""
+  binary = iree.compiler.tools.compile_str("""
     module @conv2d {
       util.global @handle : !cudnn.handle
 

@@ -60,7 +60,7 @@ func.func @conv2d_1x1(
           tensor<8x256x256x32xf32>, tensor<1x1x1x32xf32>)
        -> tensor<8x256x256x32xf32>
 
-  %1 = mhlo.sqrt %0 : tensor<8x256x256x32xf32>
+  %1 = stablehlo.sqrt %0 : tensor<8x256x256x32xf32>
 
   return %0 : tensor<8x256x256x32xf32>
 }
@@ -113,7 +113,7 @@ func.func @conv2d_3x3(
           tensor<8x256x256x32xf32>, tensor<1x1x1x32xf32>)
        -> tensor<8x256x256x32xf32>
 
-  %1 = mhlo.sqrt %0 : tensor<8x256x256x32xf32>
+  %1 = stablehlo.sqrt %0 : tensor<8x256x256x32xf32>
 
   return %0 : tensor<8x256x256x32xf32>
 }

@@ -43,8 +43,8 @@ func.func @foo() -> tensor<42xf32> {
 transform.sequence failures(propagate) {
 ^bb0(%arg0: !transform.any_op):
   transform.iree.register_match_callbacks
-  // expected-error @below {{callback 'reduction_partial' not found in the registry}}
-  transform.iree.match_callback failures(suppress) "reduction_partial"(%arg0) 
+  // expected-error @below {{callback 'reduction_partial_nvgpu' not found in the registry}}
+  transform.iree.match_callback failures(suppress) "reduction_partial_nvgpu"(%arg0)
     : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
 }
 
@@ -53,7 +53,7 @@ transform.sequence failures(propagate) {
 transform.sequence failures(propagate) {
 ^bb0(%arg0: !transform.any_op):
   transform.iree.register_nvgpu_match_callbacks
-  transform.iree.match_callback failures(suppress) "reduction_partial"(%arg0) 
+  transform.iree.match_callback failures(suppress) "reduction_partial_nvgpu"(%arg0)
     : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
 }
 
@@ -63,6 +63,6 @@ transform.sequence failures(propagate) {
 ^bb0(%arg0: !transform.any_op):
   transform.iree.register_match_callbacks
   transform.iree.register_nvgpu_match_callbacks
-  transform.iree.match_callback failures(suppress) "reduction_partial"(%arg0) 
+  transform.iree.match_callback failures(suppress) "reduction_partial_nvgpu"(%arg0)
     : (!transform.any_op) -> (!transform.any_op, !transform.any_op, !transform.any_op, !transform.any_op)
 }

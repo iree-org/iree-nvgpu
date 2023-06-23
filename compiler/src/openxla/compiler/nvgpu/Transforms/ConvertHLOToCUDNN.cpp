@@ -67,6 +67,8 @@ class CudnnHandleCache {
 
 // Helper functions for permutations.
 
+static constexpr int64_t kExtraUnitDimension = -1;
+
 static SmallVector<int64_t> getTensorLayoutPermutation(
     ArrayRef<int64_t> srcSpatialDims, int64_t srcBatchDim,
     int64_t srcFeatureDim, Layout dst) {
@@ -113,19 +115,26 @@ static bool isIdentityPermutation(const ArrayRef<int64_t> permutation) {
   return true;
 }
 
-static SmallVector<int64_t> applyPermutation(SmallVector<int64_t> &permutation,
-                                             ArrayRef<int64_t> argument) {
-  int64_t n = argument.size();
-  SmallVector<int64_t> result(n);
-  for (int64_t i = 0; i < n; ++i) result[i] = argument[permutation[i]];
-  return result;
+static SmallVector<int64_t> composePermutations(ArrayRef<int64_t> lhs,
+                                                ArrayRef<int64_t> rhs) {
+  int64_t n = lhs.size();
+  SmallVector<int64_t> composed;
+  composed.reserve(n);
+  for (int64_t i = 0; i < n; i++) composed.push_back(lhs[rhs[i]]);
+  return composed;
 }
 
-static RankedTensorType getPermutedTensorType(
-    Type originalTy, SmallVector<int64_t> &permutation) {
+static RankedTensorType getPermutedTensorType(Type originalTy,
+                                              ArrayRef<int64_t> permutation) {
   auto rankedTy = originalTy.cast<RankedTensorType>();
-  SmallVector<int64_t> permutedShape =
-      applyPermutation(permutation, rankedTy.getShape());
+  assert(rankedTy.getShape().size() <= permutation.size());
+  int64_t n = permutation.size();
+  SmallVector<int64_t> permutedShape(n);
+  for (int64_t i = 0; i < n; ++i) {
+    permutedShape[i] = permutation[i] == kExtraUnitDimension
+                           ? 1
+                           : rankedTy.getDimSize(permutation[i]);
+  }
   return RankedTensorType::get(permutedShape, rankedTy.getElementType());
 }
 
@@ -160,10 +169,76 @@ struct PermutedValue {
 }  // namespace
 
 // Declare for recursive use.
+static Value getValueInCudnnGraphAsArg(
+    Value originalValue, SmallVector<int64_t> &permutation, Layout layout,
+    SmallVector<PermutedValue> &cuddnGraphOperands, Block *cudnnGraphBody);
 static Value getValueInCudnnGraphRecursively(
     Value originalValue, SmallVector<int64_t> &permutation, Layout layout,
     SmallVector<PermutedValue> &cuddnGraphOperands, Block *cudnnGraphBody,
     SmallVector<Operation *> &toBeErased, PatternRewriter &rewriter);
+
+// Bias.
+
+namespace {
+struct BiasMatch {
+  Value operand;
+  stablehlo::BroadcastInDimOp bcastOp;
+};
+}  // namespace
+
+static FailureOr<BiasMatch> matchBias(stablehlo::AddOp op,
+                                      PatternRewriter &rewriter) {
+  if (auto bcastOp = llvm::dyn_cast_or_null<stablehlo::BroadcastInDimOp>(
+          op.getLhs().getDefiningOp())) {
+    return BiasMatch{op.getRhs(), bcastOp};
+  }
+  if (auto bcastOp = llvm::dyn_cast_or_null<stablehlo::BroadcastInDimOp>(
+          op.getRhs().getDefiningOp())) {
+    return BiasMatch{op.getLhs(), bcastOp};
+  }
+  return rewriter.notifyMatchFailure(op, "not a bias op");
+}
+
+static FailureOr<Value> tryGettingValueInCudnnGraphRecursivelyByFusingBias(
+    Value originalValue, SmallVector<int64_t> permutation, Layout layout,
+    SmallVector<PermutedValue> &cuddnGraphOperands, Block *cudnnGraphBody,
+    SmallVector<Operation *> &toBeErased, PatternRewriter &rewriter) {
+  // Match bias.
+  Operation *def = originalValue.getDefiningOp();
+  auto addOp = llvm::dyn_cast_or_null<stablehlo::AddOp>(def);
+  if (!addOp || !addOp->hasOneUse()) return failure();
+  FailureOr<BiasMatch> biasMatch = matchBias(addOp, rewriter);
+  if (failed(biasMatch)) return failure();
+
+  // Mark original op for ereasure.
+  toBeErased.push_back(addOp);
+  if (biasMatch->bcastOp->hasOneUse()) toBeErased.push_back(biasMatch->bcastOp);
+
+  // Derive bias permutation.
+  SmallVector<int64_t> expandingPermutation(permutation.size(),
+                                            kExtraUnitDimension);
+  int64_t nextBcastOperandDim = 0;
+  for (const APInt &bcastDim : biasMatch->bcastOp.getBroadcastDimensions()) {
+    expandingPermutation[bcastDim.getLimitedValue()] = nextBcastOperandDim++;
+  }
+  SmallVector<int64_t> biasPermutation =
+      composePermutations(expandingPermutation, permutation);
+
+  // Recur for operands.
+  Value operand = getValueInCudnnGraphRecursively(
+      biasMatch->operand, permutation, layout, cuddnGraphOperands,
+      cudnnGraphBody, toBeErased, rewriter);
+  Value bias = getValueInCudnnGraphRecursively(
+      biasMatch->bcastOp.getOperand(), biasPermutation, layout,
+      cuddnGraphOperands, cudnnGraphBody, toBeErased, rewriter);
+
+  // Create bias op in CUDNN graph.
+  Location loc = addOp.getLoc();
+  TensorType originalResultTy = addOp.getType();
+  Type resultTy = getCudnnTensorType(
+      getPermutedTensorType(originalResultTy, permutation), layout);
+  return rewriter.create<BiasOp>(loc, resultTy, operand, bias).getResult();
+}
 
 // Relu.
 
@@ -278,7 +353,7 @@ tryGettingValueInCudnnGraphRecursivelyByFusingConvolution(
   // Mark original op for ereasure.
   toBeErased.push_back(convOp);
 
-  // Recur for input operand.
+  // Do not recur for convolution operands to avoid unsupported CUDNN graphs.
   // Result layout is assumed to be the same as that of the operand (inferred in
   // runtime).
   Layout inputLayout = layout;
@@ -288,9 +363,9 @@ tryGettingValueInCudnnGraphRecursivelyByFusingConvolution(
       /*srcBatchDim=*/dims.getInputBatchDimension(),
       /*srcFeatureDim=*/dims.getInputFeatureDimension(),
       /*dst=*/inputLayout);
-  Value input = getValueInCudnnGraphRecursively(
-      convOp.getLhs(), inputPermutation, inputLayout, cuddnGraphOperands,
-      cudnnGraphBody, toBeErased, rewriter);
+  Value input =
+      getValueInCudnnGraphAsArg(convOp.getLhs(), inputPermutation, inputLayout,
+                                cuddnGraphOperands, cudnnGraphBody);
 
   // Recur for kernel operand.
   Layout kernelLayout = Layout::KHWC;
@@ -299,9 +374,9 @@ tryGettingValueInCudnnGraphRecursivelyByFusingConvolution(
       /*srcOutputFeatureDim=*/dims.getKernelOutputFeatureDimension(),
       /*srcInputFeatureDim=*/dims.getKernelInputFeatureDimension(),
       /*dst*/ kernelLayout);
-  Value kernel = getValueInCudnnGraphRecursively(
-      convOp.getRhs(), kernelPermutation, kernelLayout, cuddnGraphOperands,
-      cudnnGraphBody, toBeErased, rewriter);
+  Value kernel = getValueInCudnnGraphAsArg(convOp.getRhs(), kernelPermutation,
+                                           kernelLayout, cuddnGraphOperands,
+                                           cudnnGraphBody);
 
   // Create conv op in CUDNN graph.
   Location loc = convOp.getLoc();
@@ -374,6 +449,13 @@ static Value getValueInCudnnGraphRecursively(
           cudnnGraphBody, toBeErased, rewriter);
   if (succeeded(fusedReluResult)) return *fusedReluResult;
 
+  // Try fusing bias into the CUDNN graph.
+  FailureOr<Value> fusedBiasResult =
+      tryGettingValueInCudnnGraphRecursivelyByFusingBias(
+          originalValue, permutation, layout, cuddnGraphOperands,
+          cudnnGraphBody, toBeErased, rewriter);
+  if (succeeded(fusedBiasResult)) return *fusedBiasResult;
+
   // Give up and get value as an operand.
   return getValueInCudnnGraphAsArg(originalValue, permutation, layout,
                                    cuddnGraphOperands, cudnnGraphBody);
@@ -386,9 +468,15 @@ Value findRootForCudnnGraphOutlining(Value candidate,
   Operation *user = *candidate.getUsers().begin();
 
   // Match and follow relu ops.
-  if (auto clampOp = llvm::dyn_cast_or_null<stablehlo::ClampOp>(user)) {
+  if (auto clampOp = llvm::dyn_cast<stablehlo::ClampOp>(user)) {
     if (succeeded(matchRelu(clampOp, rewriter))) {
       return findRootForCudnnGraphOutlining(clampOp.getResult(), rewriter);
+    }
+  }
+
+  if (auto addOp = llvm::dyn_cast<stablehlo::AddOp>(user)) {
+    if (succeeded(matchBias(addOp, rewriter))) {
+      return findRootForCudnnGraphOutlining(addOp.getResult(), rewriter);
     }
   }
 
@@ -465,10 +553,8 @@ class OutlineCudnnGraphPattern
     Value root = findRootForCudnnGraphOutlining(op.getResult(), rewriter);
 
     // Create CUDNN graph recursively and fuse producers greedily into it. Keep
-    // track of
-    //  (i) the operands' permutations to guarantee the required CUDNN layouts,
-    //  and
-    // (ii) the original operations to be erased.
+    // track of (i) the operands' permutations to guarantee the required CUDNN
+    // layouts, and (ii) the original operations to be erased.
     StringRef baseName = op->getName().getStringRef();
     SmallVector<PermutedValue> cuddnGraphOperands;
     SmallVector<Operation *> toBeErased;
@@ -486,14 +572,52 @@ class OutlineCudnnGraphPattern
     auto loadedHandle = rewriter.create<IREE::Util::GlobalLoadOp>(
         loc, handleTy, globalHandle.getSymNameAttr());
 
-    // Transpose operands to the CUDNN call where needed.
+    // Expand and transpose operands to the CUDNN call where needed.
     SmallVector<Value> transposedCuddnGraphOperands;
     for (const auto &it : cuddnGraphOperands) {
       Value transposedOperand = it.value;
-      if (!isIdentityPermutation(it.permutation)) {
-        transposedOperand = rewriter.create<stablehlo::TransposeOp>(
-            loc, transposedOperand, rewriter.getI64TensorAttr(it.permutation));
+
+      // Reshape operand to expand its shape as needed for the CUDNN layout.
+      auto rankedTy = transposedOperand.getType().cast<RankedTensorType>();
+      SmallVector<int64_t> reshapedShape;
+      int64_t nextOriginalDim = 0;
+      for (int64_t dim : it.permutation) {
+        int64_t dimSize = dim == kExtraUnitDimension
+                              ? 1
+                              : rankedTy.getDimSize(nextOriginalDim++);
+        reshapedShape.push_back(dimSize);
       }
+      auto reshapedTy =
+          RankedTensorType::get(reshapedShape, rankedTy.getElementType());
+      if (transposedOperand.getType() != reshapedTy) {
+        transposedOperand = rewriter.create<stablehlo::ReshapeOp>(
+            loc, reshapedTy, transposedOperand);
+      }
+
+      // Transpose operands to conform to CUDNN layout.
+      SmallVector<int64_t> extraDims;
+      SmallVector<int64_t> originalDims;
+      int64_t n = it.permutation.size();
+      for (int64_t i = 0; i < n; i++) {
+        if (it.permutation[i] == kExtraUnitDimension) {
+          extraDims.push_back(i);
+        } else {
+          originalDims.push_back(i);
+        }
+      }
+      SmallVector<int64_t> composedPermutation;
+      int64_t nextExtraDim = 0;
+      for (int64_t dim : it.permutation) {
+        composedPermutation.push_back(dim == kExtraUnitDimension
+                                          ? extraDims[nextExtraDim++]
+                                          : originalDims[dim]);
+      }
+      if (!isIdentityPermutation(composedPermutation)) {
+        transposedOperand = rewriter.create<stablehlo::TransposeOp>(
+            loc, transposedOperand,
+            rewriter.getI64TensorAttr(composedPermutation));
+      }
+
       transposedCuddnGraphOperands.push_back(transposedOperand);
     }
 

@@ -1,4 +1,4 @@
-// RUN: iree-opt --pass-pipeline="builtin.module(openxla-nvgpu-flow-transform-interpreter,canonicalize,cse)" %s | \
+// RUN: iree-opt --iree-plugin=openxla-transform --pass-pipeline="builtin.module(openxla-nvgpu-flow-transform-interpreter{enable-reduction-dispatch-formation=1},canonicalize,cse)" %s | \
 // RUN: FileCheck %s
 
 // In these tests, occasional use of "check next" inteds to ensure that

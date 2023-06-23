@@ -59,7 +59,22 @@ def FlowTransformInterpreterPass
             "top-level transform op.">,
     Option<"debugEmitRemarkOnMatch", "debug-emit-remark-on-match", "bool",
             "false",
-            "Emit remark whenever a subgraph matches a pattern.">
+            "Emit remark whenever a subgraph matches a pattern.">,
+    Option<"debugPrintConstructedModule",
+           "debug-print-constructed-module",
+           "bool",
+           "false",
+           "Print the transform module constructed on-the-fly by the pass.">,
+    Option<"enableReductionDispatchFormation",
+           "enable-reduction-dispatch-formation",
+           "bool",
+           "false",
+           "Enable TD-driven dispatch region formation for reductions.">,
+    Option<"enableMatmulPadSplitK",
+           "enable-matmul-pad-split-k",
+           "bool",
+           "false",
+           "Enable TD-driven graph-level matmul padding and split-K.">
   ];
 }
 

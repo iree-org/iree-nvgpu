@@ -4,9 +4,11 @@
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 
+#include "iree-dialects/Dialect/LinalgTransform/StructuredTransformOpsExt.h"
 #include "iree/compiler/Codegen/Common/CommonPasses.h"
 #include "iree/compiler/PluginAPI/Client.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/Dialect/Transform/IR/MatchInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "openxla/compiler/nvgpu/Dialect/CUBLAS/IR/CUBLASDialect.h"
 #include "openxla/compiler/nvgpu/Dialect/CUDNN/IR/CUDNNDialect.h"
@@ -158,6 +160,19 @@ IREE_DEFINE_COMPILER_OPTION_FLAGS(CudnnOptions);
 // OpenXLA compiler Transform dialect plugin
 //===----------------------------------------------------------------------===//
 
+namespace {
+
+template <typename OpTy>
+class NoopMatchInterface
+    : public mlir::transform::MatchOpInterface::ExternalModel<
+          NoopMatchInterface<OpTy>, OpTy> {};
+
+template <typename... Ops>
+void attachNoopMatchInterface(MLIRContext &context) {
+  (void)std::initializer_list<int>{
+      (Ops::template attachInterface<NoopMatchInterface<Ops>>(context), 0)...};
+}
+
 struct TransformPreprocessingOptions {
   std::string preprocessingTransformFileName;
 
@@ -180,6 +195,13 @@ struct TransformPreprocessingSession
 
   void onRegisterDialects(DialectRegistry &registry) override {
     mlir::openxla::nvgpu::registerFlowTransformExtension(registry);
+    registry.addExtension(
+        +[](MLIRContext *context, transform::TransformDialect *) {
+          attachNoopMatchInterface<
+              transform_ext::MatchCallbackOp,
+              IREE::transform_dialect::FilterOutAlreadyInDispatchRegionOp>(
+              *context);
+        });
   }
 
   void extendPreprocessingPassPipeline(OpPassManager &pm) override {
@@ -187,6 +209,8 @@ struct TransformPreprocessingSession
         options.preprocessingTransformFileName));
   }
 };
+
+}  // namespace
 
 IREE_DEFINE_COMPILER_OPTION_FLAGS(TransformPreprocessingOptions);
 

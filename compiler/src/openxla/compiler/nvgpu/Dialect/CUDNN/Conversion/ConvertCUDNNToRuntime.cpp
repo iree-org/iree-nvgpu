@@ -198,15 +198,7 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
   return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
                  functionType);
 }
-/*
- StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
-     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
-     int64_t uid, int64_t alignment, int32_t is_virtual) {
-   return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
-                     is_virtual);
- }
 
-*/
 func::FuncOp CudnnAPI::getReluFunction(PatternRewriter &rewriter,
                                        ModuleOp module) {
   MLIRContext *ctx = module->getContext();
@@ -697,15 +689,6 @@ struct ConvertCudnnBiasOp : public CudnnOpConversionPattern<BiasOp> {
 // cudnn.relu
 //===----------------------------------------------------------------------===//
 
-/*
- StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
-     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
-     int64_t uid, int64_t alignment, int32_t is_virtual) {
-   return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
-                     is_virtual);
- }
-
-*/
 struct ConvertCudnnReluOp : public CudnnOpConversionPattern<ReluOp> {
   using CudnnOpConversionPattern::CudnnOpConversionPattern;
 

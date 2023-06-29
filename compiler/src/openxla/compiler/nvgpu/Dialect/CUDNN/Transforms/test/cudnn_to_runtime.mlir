@@ -251,3 +251,23 @@ func.func @main(%arg0: !hal.device) -> !cudnn.handle {
 // CHECK: func @main(%[[DEVICE:.*]]: !hal.device) -> !cudnn.handle {
 // CHECK:   call @cudnn.handle(%[[DEVICE]]) : (!hal.device) -> !cudnn.handle
 // CHECK: }
+
+// -----
+
+cudnn.graph @relu(%x: !cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32> {
+  %0 = cudnn.relu(%x) type=f32 lower_clip=0.5 : (!cudnn.tensor<8x4x4xf32>)
+                                -> !cudnn.tensor<8x4x4xf32>
+  cudnn.return %0: !cudnn.tensor<8x4x4xf32>
+}
+
+// CHECK: func @relu.builder(%[[HANDLE:.*]]: !cudnn.handle) -> !cudnn.operation_graph {
+// CHECK:   %[[X:.*]] = call @cudnn.tensor.create.3d
+// CHECK:   %[[LOWERCLIP:.*]] = arith.constant 5.000000e-01 : f32
+// CHECK:   %[[UPPERCLIP:.*]] = arith.constant 0x7F800000 : f32
+// CHECK:   %[[UID:.*]] = arith.constant 0 : i64
+// CHECK:   %[[ALIGNMENT:.*]] = arith.constant 32 : i64
+// CHECK:   %[[ISVIRTUAL:.*]] = arith.constant 0 : i32
+// CHECK:   %[[Y:.*]] = call @cudnn.relu(%[[X]], %[[LOWERCLIP]], %[[UPPERCLIP]], %[[UID]], %[[ALIGNMENT]], %[[ISVIRTUAL]])
+// CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[HANDLE]], %[[Y]])
+// CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
+// CHECK: }

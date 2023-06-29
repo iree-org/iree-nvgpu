@@ -68,6 +68,9 @@ class CudnnAPI {
   func::FuncOp getConvolutionFunction(PatternRewriter &rewriter,
                                       ModuleOp module, int64_t spatial_dims);
 
+  // Imports `@cudnn.relu` into the module.
+  func::FuncOp getReluFunction(PatternRewriter &rewriter, ModuleOp module);
+
   // Imports `@cudnn.handle` into the module.
   func::FuncOp getHandleFunction(PatternRewriter &rewriter, ModuleOp module);
 
@@ -192,6 +195,33 @@ func::FuncOp CudnnAPI::getConvolutionFunction(PatternRewriter &rewriter,
   auto functionType = FunctionType::get(ctx, args, rets);
 
   auto functionName = llvm::formatv("cudnn.convolution.{0}d", spatial_dims);
+  return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
+                 functionType);
+}
+/*
+ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
+     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
+     int64_t uid, int64_t alignment, int32_t is_virtual) {
+   return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
+                     is_virtual);
+ }
+
+*/
+func::FuncOp CudnnAPI::getReluFunction(PatternRewriter &rewriter,
+                                       ModuleOp module) {
+  MLIRContext *ctx = module->getContext();
+  auto tensor = CudnnTensorType::get(ctx);
+  auto f32 = rewriter.getF32Type();
+  auto i64 = rewriter.getI64Type();
+  auto i32 = rewriter.getI32Type();
+
+  SmallVector<Type> args = {/*input=*/tensor,   /*lower_clip=*/f32,
+                            /*upper_clip=*/f32, /*uid=*/i64,
+                            /*alignment=*/i64,  /*is_virtual=*/i32};
+  SmallVector<Type> ret = {/*y=*/tensor};
+
+  auto functionType = FunctionType::get(ctx, args, ret);
+  auto functionName = llvm::formatv("cudnn.relu");
   return addDecl(rewriter, module, StringAttr::get(ctx, functionName),
                  functionType);
 }
@@ -664,6 +694,52 @@ struct ConvertCudnnBiasOp : public CudnnOpConversionPattern<BiasOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// cudnn.relu
+//===----------------------------------------------------------------------===//
+
+/*
+ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
+     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
+     int64_t uid, int64_t alignment, int32_t is_virtual) {
+   return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
+                     is_virtual);
+ }
+
+*/
+struct ConvertCudnnReluOp : public CudnnOpConversionPattern<ReluOp> {
+  using CudnnOpConversionPattern::CudnnOpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ReluOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    MLIRContext *ctx = rewriter.getContext();
+    ImplicitLocOpBuilder b(op->getLoc(), rewriter);
+    SmallVector<Value> args(adaptor.getOperands());
+    auto f32 = rewriter.getF32Type();
+    int64_t alignment = op.getComputeType().getIntOrFloatBitWidth();
+    // It is unable to convert the lowerClip directly to float, thus the static
+    // cast.
+    float lower_clip =
+        static_cast<float>(adaptor.getLowerClip().convertToDouble());
+    args.push_back(b.create<arith::ConstantFloatOp>(APFloat(lower_clip), f32));
+
+    // +infinity for upper-clip.
+    args.push_back(b.create<arith::ConstantFloatOp>(
+        APFloat::getInf(f32.getFloatSemantics()), f32));
+
+    // Setting UID to `0` since none is supplied.
+    args.push_back(b.create<arith::ConstantIntOp>(0, 64));
+    args.push_back(b.create<arith::ConstantIntOp>(alignment, 64));
+    args.push_back(b.create<arith::ConstantIntOp>(IsVirtual(op.getRes()), 32));
+
+    auto relu = api->getReluFunction(rewriter, op->getParentOfType<ModuleOp>());
+    rewriter.replaceOpWithNewOp<func::CallOp>(op, relu.getSymName(),
+                                              CudnnTensorType::get(ctx), args);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // cudnn.convolution
 //===----------------------------------------------------------------------===//
 
@@ -737,6 +813,7 @@ void populateCudnnToRuntimePatterns(mlir::TypeConverter &typeConverter,
   //===--------------------------------------------------------------------===//
 
   patterns.insert<ConvertCudnnBiasOp>(typeConverter, ctx, api);
+  patterns.insert<ConvertCudnnReluOp>(typeConverter, ctx, api);
   patterns.insert<ConvertCudnnConvolutionOp>(typeConverter, ctx, api);
 }
 

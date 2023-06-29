@@ -95,6 +95,7 @@ func.func @predict(%arg0: tensor<1x56x56x64xf32>) -> tensor<1x56x56x256xf32>
 // CHECK-IR: func.func @stablehlo.convolution.builder
 // CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
 // CHECK-IR:   call @cudnn.tensor.create.4d.khwc
+// CHECK-IR:   call @cudnn.tensor.create.4d.nhwc
 // CHECK-IR:   call @cudnn.convolution.2d
 // CHECK-IR:   call @cudnn.operation_graph.create
 
@@ -105,4 +106,4 @@ func.func @predict(%arg0: tensor<1x56x56x64xf32>) -> tensor<1x56x56x256xf32>
 // CHECK-IR: func.func private @_predict
 // CHECK-IR:   util.global.load
 // CHECK-IR:   util.global.load
-// CHECK-IR:   call @cudnn.execute.2
+// CHECK-IR:   call @cudnn.execute.3.1

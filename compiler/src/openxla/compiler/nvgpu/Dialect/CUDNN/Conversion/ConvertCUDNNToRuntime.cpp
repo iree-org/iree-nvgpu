@@ -204,12 +204,10 @@ func::FuncOp CudnnAPI::getReluFunction(PatternRewriter &rewriter,
   MLIRContext *ctx = module->getContext();
   auto tensor = CudnnTensorType::get(ctx);
   auto f32 = rewriter.getF32Type();
-  auto i64 = rewriter.getI64Type();
   auto i32 = rewriter.getI32Type();
 
-  SmallVector<Type> args = {/*input=*/tensor,   /*lower_clip=*/f32,
-                            /*upper_clip=*/f32, /*uid=*/i64,
-                            /*alignment=*/i64,  /*is_virtual=*/i32};
+  SmallVector<Type> args = {/*input=*/tensor, /*lower_clip=*/f32,
+                            /*upper_clip=*/f32, /*is_virtual=*/i32};
   SmallVector<Type> ret = {/*y=*/tensor};
 
   auto functionType = FunctionType::get(ctx, args, ret);
@@ -699,7 +697,7 @@ struct ConvertCudnnReluOp : public CudnnOpConversionPattern<ReluOp> {
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
     SmallVector<Value> args(adaptor.getOperands());
     auto f32 = rewriter.getF32Type();
-    int64_t alignment = op.getComputeType().getIntOrFloatBitWidth();
+
     // It is unable to convert the lowerClip directly to float, thus the static
     // cast.
     float lower_clip =
@@ -709,10 +707,6 @@ struct ConvertCudnnReluOp : public CudnnOpConversionPattern<ReluOp> {
     // +infinity for upper-clip.
     args.push_back(b.create<arith::ConstantFloatOp>(
         APFloat::getInf(f32.getFloatSemantics()), f32));
-
-    // Setting UID to `0` since none is supplied.
-    args.push_back(b.create<arith::ConstantIntOp>(0, 64));
-    args.push_back(b.create<arith::ConstantIntOp>(alignment, 64));
     args.push_back(b.create<arith::ConstantIntOp>(IsVirtual(op.getRes()), 32));
 
     auto relu = api->getReluFunction(rewriter, op->getParentOfType<ModuleOp>());

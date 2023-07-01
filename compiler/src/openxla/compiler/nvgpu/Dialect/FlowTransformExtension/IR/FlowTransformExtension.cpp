@@ -31,6 +31,7 @@ void transform_dialect::FilterOutAlreadyInDispatchRegionOp::getEffects(
 
 DiagnosedSilenceableFailure
 transform_dialect::FilterOutAlreadyInDispatchRegionOp::apply(
+    transform::TransformRewriter &rewriter,
     transform::TransformResults &results, transform::TransformState &state) {
   RaggedArray<Operation *> inputs;
   for (Value operand : getTarget()) {
@@ -273,6 +274,7 @@ void transform_dialect::RegisterNVGPUMatchCallbacks::getEffects(
 
 DiagnosedSilenceableFailure
 transform_dialect::RegisterNVGPUMatchCallbacks::apply(
+    transform::TransformRewriter &rewriter,
     transform::TransformResults &results, transform::TransformState &state) {
   auto *registry = state.getExtension<transform_ext::MatchCallbacksRegistry>();
   if (!registry) {

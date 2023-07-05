@@ -700,8 +700,7 @@ struct ConvertCudnnReluOp : public CudnnOpConversionPattern<ReluOp> {
 
     // It is unable to convert the lowerClip directly to float, thus the static
     // cast.
-    float lower_clip =
-        static_cast<float>(adaptor.getLowerClip().convertToDouble());
+    float lower_clip = adaptor.getLowerClip().convertToDouble();
     args.push_back(b.create<arith::ConstantFloatOp>(APFloat(lower_clip), f32));
 
     // +infinity for upper-clip.

@@ -264,10 +264,8 @@ cudnn.graph @relu(%x: !cudnn.tensor<8x4x4xf32>) -> !cudnn.tensor<8x4x4xf32> {
 // CHECK:   %[[X:.*]] = call @cudnn.tensor.create.3d
 // CHECK:   %[[LOWERCLIP:.*]] = arith.constant 5.000000e-01 : f32
 // CHECK:   %[[UPPERCLIP:.*]] = arith.constant 0x7F800000 : f32
-// CHECK:   %[[UID:.*]] = arith.constant 0 : i64
-// CHECK:   %[[ALIGNMENT:.*]] = arith.constant 32 : i64
 // CHECK:   %[[ISVIRTUAL:.*]] = arith.constant 0 : i32
-// CHECK:   %[[Y:.*]] = call @cudnn.relu(%[[X]], %[[LOWERCLIP]], %[[UPPERCLIP]], %[[UID]], %[[ALIGNMENT]], %[[ISVIRTUAL]])
+// CHECK:   %[[Y:.*]] = call @cudnn.relu(%[[X]], %[[LOWERCLIP]], %[[UPPERCLIP]], %[[ISVIRTUAL]])
 // CHECK:   %[[GRAPH:.*]] = call @cudnn.operation_graph.create(%[[HANDLE]], %[[Y]])
 // CHECK:   return %[[GRAPH]] : !cudnn.operation_graph
 // CHECK: }

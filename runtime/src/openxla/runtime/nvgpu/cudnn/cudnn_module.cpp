@@ -100,7 +100,6 @@ class CudnnModuleState {
   // Creates a pointwise relu operation and returns result tensor.
   StatusOr<vm::ref<CudnnTensor>> Relu(const vm::ref<CudnnTensor> input,
                                       float lower_clip, float upper_clip,
-                                      int64_t uid, int64_t alignment,
                                       int32_t is_virtual);
 
   // Creates a pointwise unary operation and returns a result tensor.
@@ -194,8 +193,8 @@ Status CudnnModuleState::PrintGraphDebug(
 
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
     const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
-    int64_t uid, int64_t alignment, int32_t is_virtual) {
-  return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
+    int32_t is_virtual) {
+  return CreateRelu(syms_, *input, lower_clip, upper_clip, uid_++, kAlignment,
                     is_virtual);
 }
 

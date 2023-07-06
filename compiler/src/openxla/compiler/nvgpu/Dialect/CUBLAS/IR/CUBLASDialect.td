@@ -33,7 +33,7 @@ def CUBLAS_Dialect : Dialect {
 //===----------------------------------------------------------------------===//
 
 // TODO(ezhulenev): Add all supported data types.
-def CUBLAS_AnyDataType : AnyTypeOf<[F32], "any supported cuBLAS data type">;
+def CUBLAS_AnyDataType : AnyTypeOf<[F32,F64], "any supported cuBLAS data type">;
 
 def CUBLAS_Tensor2D : 2DTensorOf<[CUBLAS_AnyDataType]>;
 

@@ -130,10 +130,10 @@ func::FuncOp CudnnAPI::getPointwiseUnaryFunction(PatternRewriter &rewriter,
                                                  std::string_view op) {
   MLIRContext *ctx = module->getContext();
   auto tensor = CudnnTensorType::get(ctx);
-  auto f32 = Float32Type::get(ctx);
+  auto f64 = Float64Type::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
 
-  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*is_virtual=*/i32};
+  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f64, /*is_virtual=*/i32};
   SmallVector<Type> rets = {/*y=*/tensor};
   auto functionType = FunctionType::get(ctx, args, rets);
 
@@ -146,11 +146,11 @@ func::FuncOp CudnnAPI::getPointwiseBinaryFunction(PatternRewriter &rewriter,
                                                   std::string_view op) {
   MLIRContext *ctx = module->getContext();
   auto tensor = CudnnTensorType::get(ctx);
-  auto f32 = Float32Type::get(ctx);
+  auto f64 = Float64Type::get(ctx);
   auto i32 = IntegerType::get(ctx, 32);
 
-  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f32, /*b=*/tensor,
-                            /*alpha2=*/f32, /*is_virtual=*/i32};
+  SmallVector<Type> args = {/*x=*/tensor, /*alpha=*/f64, /*b=*/tensor,
+                            /*alpha2=*/f64, /*is_virtual=*/i32};
   SmallVector<Type> rets = {/*y=*/tensor};
   auto functionType = FunctionType::get(ctx, args, rets);
 
@@ -535,11 +535,11 @@ struct ConvertCudnnUnaryOp : public CudnnOpConversionPattern<T> {
     MLIRContext *ctx = rewriter.getContext();
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
 
-    auto f32 = rewriter.getF32Type();
+    auto f64 = rewriter.getF64Type();
 
     SmallVector<Value> args = {
         adaptor.getX(),
-        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f32),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f64),
         b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
     };
 
@@ -576,13 +576,13 @@ struct ConvertCudnnBinaryOp : public CudnnOpConversionPattern<T> {
     MLIRContext *ctx = rewriter.getContext();
     ImplicitLocOpBuilder b(op->getLoc(), rewriter);
 
-    auto f32 = rewriter.getF32Type();
+    auto f64 = rewriter.getF64Type();
 
     SmallVector<Value> args = {
         adaptor.getX(),
-        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f32),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha(), f64),
         adaptor.getB(),
-        b.create<arith::ConstantFloatOp>(adaptor.getAlpha2(), f32),
+        b.create<arith::ConstantFloatOp>(adaptor.getAlpha2(), f64),
         b.create<arith::ConstantIntOp>(IsVirtual(op.getY()), 32),
     };
 

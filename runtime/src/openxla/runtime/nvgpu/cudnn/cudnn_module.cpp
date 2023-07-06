@@ -99,22 +99,22 @@ class CudnnModuleState {
 
   // Creates a pointwise relu operation and returns result tensor.
   StatusOr<vm::ref<CudnnTensor>> Relu(const vm::ref<CudnnTensor> input,
-                                      float lower_clip, float upper_clip,
+                                      double lower_clip, double upper_clip,
                                       int64_t uid, int64_t alignment,
                                       int32_t is_virtual);
 
   // Creates a pointwise unary operation and returns a result tensor.
   template <cudnnPointwiseMode_t mode>
   StatusOr<vm::ref<CudnnTensor>> PointwiseUnary(const vm::ref<CudnnTensor> x,
-                                                float alpha,
+                                                double alpha,
                                                 int32_t is_virtual);
 
   // Creates a pointwise binary operation and returns a result tensor.
   template <cudnnPointwiseMode_t mode>
   StatusOr<vm::ref<CudnnTensor>> PointwiseBinary(const vm::ref<CudnnTensor> x,
-                                                 float alpha,
+                                                 double alpha,
                                                  const vm::ref<CudnnTensor> b,
-                                                 float alpha2,
+                                                 double alpha2,
                                                  int32_t is_virtual);
 
   // Creates a bias operation and returns a result tensor.
@@ -193,7 +193,7 @@ Status CudnnModuleState::PrintGraphDebug(
 }
 
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
-    const vm::ref<CudnnTensor> input, float lower_clip, float upper_clip,
+    const vm::ref<CudnnTensor> input, double lower_clip, double upper_clip,
     int64_t uid, int64_t alignment, int32_t is_virtual) {
   return CreateRelu(syms_, *input, lower_clip, upper_clip, uid, alignment,
                     is_virtual);
@@ -201,15 +201,15 @@ StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::Relu(
 
 template <cudnnPointwiseMode_t mode>
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseUnary(
-    const vm::ref<CudnnTensor> x, float alpha, int32_t is_virtual) {
+    const vm::ref<CudnnTensor> x, double alpha, int32_t is_virtual) {
   return CreatePointwiseUnary(syms_, mode, *x, alpha, uid_++, kAlignment,
                               is_virtual);
 }
 
 template <cudnnPointwiseMode_t mode>
 StatusOr<vm::ref<CudnnTensor>> CudnnModuleState::PointwiseBinary(
-    const vm::ref<CudnnTensor> x, float alpha, const vm::ref<CudnnTensor> b,
-    float alpha2, int32_t is_virtual) {
+    const vm::ref<CudnnTensor> x, double alpha, const vm::ref<CudnnTensor> b,
+    double alpha2, int32_t is_virtual) {
   return CreatePointwiseBinary(syms_, mode, *x, alpha, *b, alpha2, uid_++,
                                kAlignment, is_virtual);
 }

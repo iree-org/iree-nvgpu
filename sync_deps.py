@@ -7,8 +7,8 @@
 ### Update with: openxla-workspace pin
 
 PINNED_VERSIONS = {
-  "iree": "65817331c95a48ac3f7d972667f4bd2c35b8f61e",
-  "openxla-pjrt-plugin": "c3b1a8a9fe23d04f4bb990f34d8a848a6f220db5"
+  "iree": "6e499159b393846441cc28b30a6791dc46221ec4",
+  "openxla-pjrt-plugin": "822edd55c04014ef4f6178f0cee4d66a9c48c646"
 }
 
 ORIGINS = {

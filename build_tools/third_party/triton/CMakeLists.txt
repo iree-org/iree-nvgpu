@@ -246,6 +246,7 @@ external_cc_library(
     "lib/Conversion/TritonGPUToLLVM/DotOpToLLVM.cpp"
     "lib/Conversion/TritonGPUToLLVM/ElementwiseOpToLLVM.cpp"
     "lib/Conversion/TritonGPUToLLVM/LoadStoreOpToLLVM.cpp"
+    "lib/Conversion/TritonGPUToLLVM/ScanOpToLLVM.cpp"
     "lib/Conversion/TritonGPUToLLVM/TritonGPUToLLVM.cpp"
     "lib/Conversion/TritonGPUToLLVM/TritonGPUToLLVMPass.cpp"
     "lib/Conversion/TritonGPUToLLVM/PTXAsmFormat.cpp"
@@ -305,6 +306,15 @@ external_cc_library(
   PUBLIC
 )
 
+iree_tablegen_library(
+  NAME
+    TritonLLVMIRIncGen
+  TD_FILE
+    "${TRITON_ROOT}/include/triton/Target/LLVMIR/Passes.td"
+  OUTS
+    --gen-pass-decls --name=TritonLLVMIR include/triton/Target/LLVMIR/Passes.h.inc
+)
+
 external_cc_library(
   PACKAGE
     triton
@@ -318,8 +328,10 @@ external_cc_library(
   HDRS
     "include/triton/Target/LLVMIR/LLVMIRTranslation.h"
   SRCS
+    "lib/Target/LLVMIR/LLVMDIScope.cpp"
     "lib/Target/LLVMIR/LLVMIRTranslation.cpp"
   DEPS
+    build_tools::third_party::triton::TritonLLVMIRIncGen
     LLVMIRReader
     MLIRLLVMDialect
     MLIRROCDLToLLVMIRTranslation

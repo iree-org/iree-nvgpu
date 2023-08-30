@@ -8,7 +8,7 @@
 
 PINNED_VERSIONS = {
   "iree": "ffde368bcb389613a57ed6411ed75de7e92b5190",
-  "openxla-pjrt-plugin": "0b940b502d280ffb20cfde840971bc1736a02f66"
+  "openxla-pjrt-plugin": "15b8fb01afbb391f5046beddb0ae030466dbbef9"
 }
 
 ORIGINS = {
